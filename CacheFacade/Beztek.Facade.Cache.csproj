@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <TargetFramework>net7.0</TargetFramework>
+    <id>Beztek.Facade.Cache</id>
+    <version>1.0.0</version>
+    <authors>Peter Thomas</authors>
+    <owners>Beztek Software Solutions</owners>
+    <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/Beztek-Software-Solutions/cache-facade</projectUrl>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <description>API facade over various distributed and non-distributed caches</description>
+    <releaseNotes>API facade over various distributed and non-distributed caches</releaseNotes>
+    <copyright>Copyright 2023, Beztek Software Solutions</copyright>
+    <tags>Beztek.Facade.Cache;cache-facade;CacheFacade</tags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Beztek.Facade.Queue" Version="1.0.0" />
+    <PackageReference Include="Beztek.Facade.Sql" Version="1.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="7.0.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.6.122" />
+    <PackageReference Include="System.Collections" Version="4.3.0" />
+    <PackageReference Include="System.Runtime.Caching" Version="7.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+	  <_Parameter1>Beztek.Facade.Cache.Tests</_Parameter1>
+	</AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

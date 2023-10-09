@@ -1,0 +1,63 @@
+﻿// Copyright (c) Beztek Software Solutions. All rights reserved.
+
+namespace Beztek.Facade.Cache
+{
+    using System;
+    using System.Text;
+    using System.Text.Json;
+
+    public static class SerializationUtil
+    {
+
+        private static readonly JsonSerializerOptions JsonSerializerOptions = GetJsonSerializerOptions();
+
+        public static byte[] Serialize(SerializationType serializationType, object cacheable)
+        {
+            if (serializationType == SerializationType.Json)
+            {
+                return StringToByte(JsonSerialize(cacheable));
+            }
+
+            throw new NotSupportedException($"Serialization type {serializationType} is not supported");
+        }
+
+        public static T Deserialize<T>(SerializationType serializationType, byte[] data)
+        {
+            if (serializationType == SerializationType.Json)
+            {
+                return JsonDeserialize<T>(ByteToString(data));
+            }
+
+            throw new NotSupportedException($"Serialization type {serializationType} is not supported");
+        }
+
+        public static string JsonSerialize(object cacheable)
+        {
+            return JsonSerializer.Serialize(cacheable, JsonSerializerOptions);
+        }
+
+        public static T JsonDeserialize<T>(string data)
+        {
+            return JsonSerializer.Deserialize<T>(data);
+        }
+
+        public static string ByteToString(byte[] data)
+        {
+            return Encoding.ASCII.GetString(data);
+        }
+
+        public static byte[] StringToByte(string data)
+        {
+            return Encoding.ASCII.GetBytes(data);
+        }
+
+        // Used by inline static initialization
+        private static JsonSerializerOptions GetJsonSerializerOptions()
+        {
+            JsonSerializerOptions tmpOptions = new JsonSerializerOptions {
+                IgnoreNullValues = true
+            };
+            return tmpOptions;
+        }
+    }
+}
