@@ -19,39 +19,39 @@ namespace Beztek.Facade.Cache
             this.sqlGenerator = sqlGenerator;
         }
 
-        public async Task<object> GetByIdAsync(string id)
+        public virtual async Task<object> GetByIdAsync(string id)
         {
             SqlSelect sqlSelect = this.sqlGenerator.GetSqlSelect(id);
-            return sqlFacade.GetSingleResult<T>(sqlSelect);
+            return await Task.FromResult<object>(sqlFacade.GetSingleResult<T>(sqlSelect)).ConfigureAwait(false);
         }
 
-        public async virtual Task<int> UpdateAsync(string id, object value)
+        public virtual async Task<int> UpdateAsync(string id, object value)
         {
             List<ISqlWrite> updateStatements = this.sqlGenerator.GetSqlUpdate(id, (T)value);
             IList<int> results = sqlFacade.ExecuteMultiSqlWrite(updateStatements);
-            return GetIsWritten(results);
+            return await Task.FromResult<int>(GetIsWritten(results)).ConfigureAwait(false);
         }
 
-        public async virtual Task<int> CreateAsync(string id, object value)
+        public virtual async Task<int> CreateAsync(string id, object value)
         {
             List<ISqlWrite> insertStatements = this.sqlGenerator.GetSqlInsert(id, (T)value);
             IList<int> results = sqlFacade.ExecuteMultiSqlWrite(insertStatements);
-            return GetIsWritten(results);
+            return await Task.FromResult<int>(GetIsWritten(results)).ConfigureAwait(false);
         }
 
         public virtual async Task<int> DeleteAsync(string id)
         {
             List<ISqlWrite> deleteStatements = this.sqlGenerator.GetSqlDelete(id);
             IList<int> results = sqlFacade.ExecuteMultiSqlWrite(deleteStatements);
-            return GetIsWritten(results);
+            return await Task.FromResult<int>(GetIsWritten(results)).ConfigureAwait(false);
         }
 
-        public async virtual Task<PagedResults<string>> SearchIdsByQueryAsync(SqlSelect query, int pageNum, int pageSize, bool retrieveTotalNumResults = false)
+        public virtual async Task<PagedResults<string>> SearchIdsByQueryAsync(SqlSelect query, int pageNum, int pageSize, bool retrieveTotalNumResults = false)
         {
-            return sqlFacade.GetPagedResults<string>(query, pageNum, pageSize, retrieveTotalNumResults);
+            return await Task.FromResult(sqlFacade.GetPagedResults<string>(query, pageNum, pageSize, retrieveTotalNumResults)).ConfigureAwait(false);
         }
 
-        public async Task<IDictionary<PersistenceAction, int>> BatchPersistAsync(List<PersistenceAction> persistenceActions, Dictionary<string, object> actionableItems)
+        public virtual async Task<IDictionary<PersistenceAction, int>> BatchPersistAsync(List<PersistenceAction> persistenceActions, Dictionary<string, object> actionableItems)
         {
             List<ISqlWrite> allWrites = new List<ISqlWrite>();
             List<List<ISqlWrite>> batchWriteList = new List<List<ISqlWrite>>();
@@ -89,7 +89,7 @@ namespace Beztek.Facade.Cache
                 actionIndex = actionIndex + batchWrites.Count;
             }
 
-            return result;
+            return await Task.FromResult<IDictionary<PersistenceAction, int>>(result).ConfigureAwait(false);
         }
 
         // Internal
