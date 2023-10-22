@@ -3,7 +3,7 @@
   <PropertyGroup>
 	  <TargetFramework>net7.0</TargetFramework>
     <id>Beztek.Facade.Cache</id>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <authors>Peter Thomas</authors>
     <owners>Beztek Software Solutions</owners>
     <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Beztek.Facade.Queue" Version="1.0.0" />
-    <PackageReference Include="Beztek.Facade.Sql" Version="1.0.2" />
+    <PackageReference Include="Beztek.Facade.Sql" Version="1.0.3" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="7.0.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.6.122" />
     <PackageReference Include="System.Collections" Version="4.3.0" />

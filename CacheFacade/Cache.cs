@@ -113,7 +113,7 @@ namespace Beztek.Facade.Cache
             using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis);
             try
             {
-                this.Logger?.LogInformation($"Getting item from cache. Key: {key}");
+                this.Logger?.LogDebug($"Getting item from cache. Key: {key}");
 
                 T result = await this.CacheProvider.GetAsync<T>(key).ConfigureAwait(false);
 
@@ -145,7 +145,7 @@ namespace Beztek.Facade.Cache
             finally
             {
                 stopWatch.Stop();
-                this.Logger?.LogInformation($"GetAsync/{key}");
+                this.Logger?.LogDebug($"GetAsync/{key}");
             }
         }
 
@@ -160,7 +160,7 @@ namespace Beztek.Facade.Cache
             T result = await this.GetAsync<T>(key).ConfigureAwait(false);
             try
             {
-                this.Logger?.LogInformation($"CacheProvider GetAndPutIfAbsentAsync. Key: {key}");
+                this.Logger?.LogDebug($"CacheProvider GetAndPutIfAbsentAsync. Key: {key}");
 
                 // If there is an item in the cache, return the cached object back as we are done, since the item is not absent
                 if (result != null)
@@ -196,7 +196,7 @@ namespace Beztek.Facade.Cache
             finally
             {
                 stopWatch.Stop();
-                this.Logger?.LogInformation($"GetAndPutIfAbsentAsync/{key}");
+                this.Logger?.LogDebug($"GetAndPutIfAbsentAsync/{key}");
             }
         }
 
@@ -211,7 +211,7 @@ namespace Beztek.Facade.Cache
             T result = await this.GetAsync<T>(key).ConfigureAwait(false);
             try
             {
-                this.Logger?.LogInformation($"CacheProvider GetAndReplaceAsync. Key: {key}");
+                this.Logger?.LogDebug($"CacheProvider GetAndReplaceAsync. Key: {key}");
 
                 if (result != null)
                 {
@@ -260,7 +260,7 @@ namespace Beztek.Facade.Cache
             finally
             {
                 stopWatch.Stop();
-                this.Logger?.LogInformation($"GetAndReplaceAsync/{key}");
+                this.Logger?.LogDebug($"GetAndReplaceAsync/{key}");
             }
         }
 
@@ -279,12 +279,12 @@ namespace Beztek.Facade.Cache
 
                 if (isCreate)
                 {
-                    this.Logger?.LogInformation($"CacheProvider GetAndPutAsync : Create - Key: {key}");
+                    this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Create - Key: {key}");
                     await this.GetAndPutIfAbsentAsync<T>(key, value).ConfigureAwait(false);
                 }
                 else
                 {
-                    this.Logger?.LogInformation($"CacheProvider GetAndPutAsync : Update - Key: {key}");
+                    this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Update - Key: {key}");
                     await this.GetAndReplaceAsync<T>(key, value).ConfigureAwait(false);
                 }
 
@@ -293,7 +293,7 @@ namespace Beztek.Facade.Cache
             finally
             {
                 stopWatch.Stop();
-                this.Logger?.LogInformation($"GetAndPutAsync/{key}");
+                this.Logger?.LogDebug($"GetAndPutAsync/{key}");
             }
         }
 
@@ -308,7 +308,7 @@ namespace Beztek.Facade.Cache
             T result = await this.GetAsync<T>(key).ConfigureAwait(false);
             try
             {
-                this.Logger?.LogInformation($"CacheProvider RemoveAsync. id: {key}");
+                this.Logger?.LogDebug($"CacheProvider RemoveAsync. id: {key}");
 
                 await this.CacheProvider.RemoveAsync<T>(key).ConfigureAwait(false);
 
@@ -340,7 +340,7 @@ namespace Beztek.Facade.Cache
             finally
             {
                 stopWatch.Stop();
-                this.Logger?.LogInformation($"RemoveAsync/{key}");
+                this.Logger?.LogDebug($"RemoveAsync/{key}");
             }
         }
 
@@ -423,7 +423,7 @@ namespace Beztek.Facade.Cache
             finally
             {
                 stopWatch.Stop();
-                this.Logger?.LogInformation($"FlushAsync");
+                this.Logger?.LogDebug($"FlushAsync");
             }
         }
 

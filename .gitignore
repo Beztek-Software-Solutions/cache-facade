@@ -1,4 +1,5 @@
 .vscode/*
+.vs/*
 CacheFacade/bin/*
 CacheFacade/obj/*
 CacheFacade.Tests/bin/*
