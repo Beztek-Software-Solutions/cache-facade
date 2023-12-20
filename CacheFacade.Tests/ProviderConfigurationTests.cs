@@ -15,7 +15,7 @@ namespace Beztek.Facade.Cache.Tests
             string redisCacheEndpoint = "dummy-endpoint";
             string redisPassword = "dummy-password";
             long timeToLiveMillis = 300000;
-            RedisProviderConfiguration redisProviderConfiguration = new RedisProviderConfiguration(redisCacheEndpoint, redisPassword, cacheName, timeToLiveMillis);
+            RedisProviderConfiguration redisProviderConfiguration = new RedisProviderConfiguration(redisCacheEndpoint, redisPassword, cacheName, true, false, timeToLiveMillis);
             Assert.AreEqual(cacheName, redisProviderConfiguration.CacheName);
             Assert.AreEqual(redisCacheEndpoint, redisProviderConfiguration.Endpoint);
             Assert.AreEqual(redisPassword, redisProviderConfiguration.Password);

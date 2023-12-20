@@ -22,6 +22,24 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
+        public void TestLongArraySerialzion()
+        {
+            long[] happyPathArray = new long[]{DateTime.Now.Millisecond};
+            string intermediate = SerializationUtil.JsonSerialize(happyPathArray);
+            long[] result = SerializationUtil.JsonDeserialize<long[]>(intermediate);
+            Assert.AreEqual(result, happyPathArray);
+        }
+
+        [Test]
+        public void TestLongArraySerialzionNull()
+        {
+            long[] nullArray = default(long[]);
+            string intermediate = SerializationUtil.JsonSerialize(nullArray);
+            long[] result = SerializationUtil.JsonDeserialize<long[]>(intermediate);
+            Assert.AreEqual(result, nullArray);
+        }
+
+        [Test]
         public void TestBytification()
         {
             string serializedString = SerializationUtil.JsonSerialize(new TestCacheable("test-key", "get-result"));

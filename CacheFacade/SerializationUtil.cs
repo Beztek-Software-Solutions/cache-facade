@@ -13,6 +13,9 @@ namespace Beztek.Facade.Cache
 
         public static byte[] Serialize(SerializationType serializationType, object cacheable)
         {
+            if (cacheable == null)
+                return null;
+
             if (serializationType == SerializationType.Json)
             {
                 return StringToByte(JsonSerialize(cacheable));
@@ -23,6 +26,9 @@ namespace Beztek.Facade.Cache
 
         public static T Deserialize<T>(SerializationType serializationType, byte[] data)
         {
+            if (data == null)
+                return default(T);
+
             if (serializationType == SerializationType.Json)
             {
                 return JsonDeserialize<T>(ByteToString(data));
@@ -33,21 +39,33 @@ namespace Beztek.Facade.Cache
 
         public static string JsonSerialize(object cacheable)
         {
+            if (cacheable == null)
+                return null;
+
             return JsonSerializer.Serialize(cacheable, JsonSerializerOptions);
         }
 
         public static T JsonDeserialize<T>(string data)
         {
+            if (data == null)
+                return default(T);
+
             return JsonSerializer.Deserialize<T>(data);
         }
 
         public static string ByteToString(byte[] data)
         {
+            if (data == null)
+                return null;
+
             return Encoding.ASCII.GetString(data);
         }
 
         public static byte[] StringToByte(string data)
         {
+            if (data == null)
+                return null;
+
             return Encoding.ASCII.GetBytes(data);
         }
 

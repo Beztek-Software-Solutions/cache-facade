@@ -21,8 +21,8 @@ namespace Beztek.Facade.Cache.Providers
         private static readonly Lazy<ConnectionMultiplexer> LazyConnection = new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(ConnectionConfig));
 
         private readonly IDatabase cacheDatabase;
-        private readonly string endpoint;
-        private TimeSpan timeToLive;
+        private readonly string Endpoint;
+        private TimeSpan TimeToLive;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RedisProvider"/> class using redis cache configuration.
@@ -31,15 +31,16 @@ namespace Beztek.Facade.Cache.Providers
         public RedisProvider(RedisProviderConfiguration redisCacheConfiguration)
         {
             ConnectionConfig = new ConfigurationOptions {
-                Ssl = true,
+                Password = redisCacheConfiguration.Password,
+                Ssl = redisCacheConfiguration.UseSSL,
+                AbortOnConnectFail = redisCacheConfiguration.AbortConnection
             };
 
             ConnectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
-            ConnectionConfig.Password = redisCacheConfiguration.Password;
 
             this.cacheDatabase = LazyConnection.Value.GetDatabase(redisCacheConfiguration.NameIndex);
-            this.endpoint = redisCacheConfiguration.Endpoint;
-            this.timeToLive = TimeSpan.FromMilliseconds(redisCacheConfiguration.TimeToLiveMillis);
+            this.Endpoint = redisCacheConfiguration.Endpoint;
+            this.TimeToLive = TimeSpan.FromMilliseconds(redisCacheConfiguration.TimeToLiveMillis);
         }
 
         /// <summary>
@@ -64,7 +65,7 @@ namespace Beztek.Facade.Cache.Providers
 
         public async Task PutAsync<T>(string key, T value)
         {
-            bool result = await this.cacheDatabase.StringSetAsync(key, SerializationUtil.ByteToString(SerializationUtil.Serialize(SerType, value)), this.timeToLive).ConfigureAwait(false);
+            bool result = await this.cacheDatabase.StringSetAsync(key, SerializationUtil.ByteToString(SerializationUtil.Serialize(SerType, value)), this.TimeToLive).ConfigureAwait(false);
             if (!result)
             {
                 throw new IOException($"Unable to save the value 'in the cache for key: {key}.");
@@ -89,9 +90,12 @@ namespace Beztek.Facade.Cache.Providers
 
         public async Task<bool> ClearAsync()
         {
-            IServer server = LazyConnection.Value.GetServer(this.endpoint);
-            server.FlushDatabase();
-            return true;
+            return await Task.Run( () =>
+            {
+                IServer server = LazyConnection.Value.GetServer(this.Endpoint);
+                server.FlushDatabase();
+                return true;
+            }).ConfigureAwait(false);
         }
     }
 }

@@ -43,7 +43,7 @@ namespace Beztek.Facade.Cache
                 // Cache Provider
                 case RedisProviderConfiguration redisConfiguration:
                     this.CacheProvider = new RedisProvider(redisConfiguration);
-                    lockProviderConfiguration = new RedisProviderConfiguration(redisConfiguration.Endpoint, redisConfiguration.Password, LockCacheName, LockTimeToLiveMillis, 1);
+                    lockProviderConfiguration = new RedisProviderConfiguration(redisConfiguration.Endpoint, redisConfiguration.Password, LockCacheName, redisConfiguration.UseSSL, redisConfiguration.AbortConnection, LockTimeToLiveMillis, 1);
                     break;
                 case LocalMemoryProviderConfiguration localMemoryProviderConfiguration:
                     this.CacheProvider = new LocalMemoryProvider(localMemoryProviderConfiguration);
