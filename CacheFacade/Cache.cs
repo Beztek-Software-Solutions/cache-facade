@@ -25,10 +25,13 @@ namespace Beztek.Facade.Cache
     public class Cache : ICache
     {
         private const string LockCacheName = "lockCache";
+        private const string InternalLockName = "internalLock";
         private const long LockTimeToLiveMillis = 3000;
         private const long LockAcquireTimeoutMillis = 1000;
         private readonly QueueClient queueClient;
         private readonly IDistributedLock DistributedLock;
+
+        private readonly IDistributedLock InternalDistributedLock;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Cache"/> class using cache configuration and logger object.
@@ -45,24 +48,13 @@ namespace Beztek.Facade.Cache
                 // Cache Provider
                 case RedisProviderConfiguration redisConfiguration:
                     this.CacheProvider = new RedisProvider(redisConfiguration);
-                    if (redisConfiguration.LockAlgorithm == LockType.RedisLock)
-                    {
-                        string[] endpointParts = redisConfiguration.Endpoint.Split(":");
-                        var azureEndpoint = new RedLockEndPoint {
-                            EndPoint = new DnsEndPoint(endpointParts[0], Int32.Parse(endpointParts[1])),
-                            Password = redisConfiguration.Password,
-                            Ssl = redisConfiguration.UseSSL
-                        };
-                        this.DistributedLock = new RedisLock(RedLockFactory.Create(new List<RedLockEndPoint>() { azureEndpoint }));
-                    }
-                    else if (redisConfiguration.LockAlgorithm == LockType.DisposableLockWithRedis)
-                    {
-                        lockProviderConfiguration = new RedisProviderConfiguration(redisConfiguration.Endpoint, redisConfiguration.Password, LockCacheName, redisConfiguration.UseSSL, redisConfiguration.AbortConnection, LockTimeToLiveMillis, 1);
-                    }
-                    else
-                    {
-                        lockProviderConfiguration = new LocalMemoryProviderConfiguration(LockCacheName, LockTimeToLiveMillis);
-                    }
+                    string[] endpointParts = redisConfiguration.Endpoint.Split(":");
+                    var azureEndpoint = new RedLockEndPoint {
+                        EndPoint = new DnsEndPoint(endpointParts[0], Int32.Parse(endpointParts[1])),
+                        Password = redisConfiguration.Password,
+                        Ssl = redisConfiguration.UseSSL
+                    };
+                    this.DistributedLock = new RedisLock(RedLockFactory.Create(new List<RedLockEndPoint>() { azureEndpoint }));
                     break;
                 case LocalMemoryProviderConfiguration localMemoryProviderConfiguration:
                     this.CacheProvider = new LocalMemoryProvider(localMemoryProviderConfiguration);
@@ -75,10 +67,16 @@ namespace Beztek.Facade.Cache
             }
 
             // Lock cache
-            if (lockProviderConfiguration != null && !string.Equals(LockCacheName, cacheConfiguration.CacheProviderConfiguration.CacheName, StringComparison.Ordinal))
+            if (lockProviderConfiguration != null
+                 && !string.Equals(LockCacheName, cacheConfiguration.CacheProviderConfiguration.CacheName, StringComparison.Ordinal)
+                 && !string.Equals(InternalLockName, cacheConfiguration.CacheProviderConfiguration.CacheName, StringComparison.Ordinal))
             {
                 ICache lockCache = CacheFactory.GetOrCreateCache(new CacheConfiguration(lockProviderConfiguration, CacheType.NonPersistent));
                 this.DistributedLock = new DisposableLock(lockCache, LockCacheName);
+                
+                // Used internally. Requires that trying to acquire a given lock from the same parent thread does not block
+                ICache internalLockCache = CacheFactory.GetOrCreateCache(new CacheConfiguration(new LocalMemoryProviderConfiguration(InternalLockName, LockTimeToLiveMillis), CacheType.NonPersistent));
+                this.InternalDistributedLock = new DisposableLock(internalLockCache, InternalLockName);
             }
 
             // Cache Type
