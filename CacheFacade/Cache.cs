@@ -16,6 +16,7 @@ namespace Beztek.Facade.Cache
     using Microsoft.Extensions.Logging;
     using RedLockNet.SERedis;
     using RedLockNet.SERedis.Configuration;
+    using static Beztek.Facade.Cache.RedisProviderConfiguration;
 
     /// <summary>
     /// Internal abstraction of the cache provider which provides structure of basic operations including the logging methods (trace logs and dependency metrics).
@@ -44,13 +45,24 @@ namespace Beztek.Facade.Cache
                 // Cache Provider
                 case RedisProviderConfiguration redisConfiguration:
                     this.CacheProvider = new RedisProvider(redisConfiguration);
-                    string[] endpointParts = redisConfiguration.Endpoint.Split(":");
-                    var azureEndpoint = new RedLockEndPoint {
-                        EndPoint = new DnsEndPoint(endpointParts[0], Int32.Parse(endpointParts[1])),
-                        Password = redisConfiguration.Password,
-                        Ssl = redisConfiguration.UseSSL
-                    };
-                    this.DistributedLock = new RedisLock(RedLockFactory.Create(new List<RedLockEndPoint>() { azureEndpoint }));
+                    if (redisConfiguration.LockAlgorithm == LockType.RedisLock)
+                    {
+                        string[] endpointParts = redisConfiguration.Endpoint.Split(":");
+                        var azureEndpoint = new RedLockEndPoint {
+                            EndPoint = new DnsEndPoint(endpointParts[0], Int32.Parse(endpointParts[1])),
+                            Password = redisConfiguration.Password,
+                            Ssl = redisConfiguration.UseSSL
+                        };
+                        this.DistributedLock = new RedisLock(RedLockFactory.Create(new List<RedLockEndPoint>() { azureEndpoint }));
+                    }
+                    else if (redisConfiguration.LockAlgorithm == LockType.DisposableLockWithRedis)
+                    {
+                        lockProviderConfiguration = new RedisProviderConfiguration(redisConfiguration.Endpoint, redisConfiguration.Password, LockCacheName, redisConfiguration.UseSSL, redisConfiguration.AbortConnection, LockTimeToLiveMillis, 1);
+                    }
+                    else
+                    {
+                        lockProviderConfiguration = new LocalMemoryProviderConfiguration(LockCacheName, LockTimeToLiveMillis);
+                    }
                     break;
                 case LocalMemoryProviderConfiguration localMemoryProviderConfiguration:
                     this.CacheProvider = new LocalMemoryProvider(localMemoryProviderConfiguration);

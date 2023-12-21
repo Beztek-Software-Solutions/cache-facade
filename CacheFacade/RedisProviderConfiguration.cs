@@ -7,6 +7,13 @@ namespace Beztek.Facade.Cache
     /// </summary>
     public class RedisProviderConfiguration : ICacheProviderConfiguration
     {
+        public enum LockType
+        {
+            RedisLock,
+            DisposableLockWithRedis,
+            DisposableLockLocalMemory
+        }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="RedisProviderConfiguration"/> class using Redis server endpoint and password.
         /// </summary>
@@ -15,7 +22,7 @@ namespace Beztek.Facade.Cache
         /// <param name="abortConnection">Flags whether to abort connections or not</param>
         /// <param name="password">Redis server password.</param>
         /// <param name="nameIndex">Partition index of cache (optional, defaults to 0). (Note: the lockCache uses index 1)</param>
-        public RedisProviderConfiguration(string endpoint, string password, string cacheName, bool useSSL=true, bool abortConnection=false, long timeToLiveMillis=3600000, int nameIndex = 0)
+        public RedisProviderConfiguration(string endpoint, string password, string cacheName, bool useSSL=true, bool abortConnection=false, long timeToLiveMillis=3600000, int nameIndex = 0, LockType lockAlgorithm = LockType.RedisLock)
         {
             this.CacheName = cacheName;
             this.Endpoint = endpoint;
@@ -25,6 +32,7 @@ namespace Beztek.Facade.Cache
 
             this.NameIndex = nameIndex;
             this.TimeToLiveMillis = timeToLiveMillis;
+            this.LockAlgorithm = lockAlgorithm;
             this.ProviderType = CacheProviderType.Redis;
         }
 
@@ -55,5 +63,7 @@ namespace Beztek.Facade.Cache
         public string CacheName { get; set; }
 
         public long TimeToLiveMillis { get; set; }
+
+        public LockType LockAlgorithm { get; set; } = LockType.RedisLock;
     }
 }
