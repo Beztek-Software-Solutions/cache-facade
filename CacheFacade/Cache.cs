@@ -6,7 +6,7 @@ namespace Beztek.Facade.Cache
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
-    using System.Threading;
+    using System.Net;
     using System.Threading.Tasks;
 
     using Beztek.Facade.Cache.Providers;
@@ -14,6 +14,8 @@ namespace Beztek.Facade.Cache
     using Beztek.Facade.Sql;
 
     using Microsoft.Extensions.Logging;
+    using RedLockNet.SERedis;
+    using RedLockNet.SERedis.Configuration;
 
     /// <summary>
     /// Internal abstraction of the cache provider which provides structure of basic operations including the logging methods (trace logs and dependency metrics).
@@ -25,8 +27,7 @@ namespace Beztek.Facade.Cache
         private const long LockTimeToLiveMillis = 3000;
         private const long LockAcquireTimeoutMillis = 1000;
         private readonly QueueClient queueClient;
-
-        private readonly ICache lockCache;
+        private readonly IDistributedLock DistributedLock;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Cache"/> class using cache configuration and logger object.
@@ -37,13 +38,19 @@ namespace Beztek.Facade.Cache
         {
             this.Logger = logger;
 
-            ICacheProviderConfiguration lockProviderConfiguration;
+            ICacheProviderConfiguration lockProviderConfiguration = null;
             switch (cacheConfiguration.CacheProviderConfiguration)
             {
                 // Cache Provider
                 case RedisProviderConfiguration redisConfiguration:
                     this.CacheProvider = new RedisProvider(redisConfiguration);
-                    lockProviderConfiguration = new RedisProviderConfiguration(redisConfiguration.Endpoint, redisConfiguration.Password, LockCacheName, redisConfiguration.UseSSL, redisConfiguration.AbortConnection, LockTimeToLiveMillis, 1);
+                    string[] endpointParts = redisConfiguration.Endpoint.Split(":");
+                    var azureEndpoint = new RedLockEndPoint {
+                        EndPoint = new DnsEndPoint(endpointParts[0], Int32.Parse(endpointParts[1])),
+                        Password = redisConfiguration.Password,
+                        Ssl = redisConfiguration.UseSSL
+                    };
+                    this.DistributedLock = new RedisLock(RedLockFactory.Create(new List<RedLockEndPoint>() { azureEndpoint }));
                     break;
                 case LocalMemoryProviderConfiguration localMemoryProviderConfiguration:
                     this.CacheProvider = new LocalMemoryProvider(localMemoryProviderConfiguration);
@@ -56,9 +63,10 @@ namespace Beztek.Facade.Cache
             }
 
             // Lock cache
-            if (!string.Equals(LockCacheName, cacheConfiguration.CacheProviderConfiguration.CacheName, StringComparison.Ordinal))
+            if (lockProviderConfiguration != null && !string.Equals(LockCacheName, cacheConfiguration.CacheProviderConfiguration.CacheName, StringComparison.Ordinal))
             {
-                this.lockCache = CacheFactory.GetOrCreateCache(new CacheConfiguration(lockProviderConfiguration, CacheType.NonPersistent));
+                ICache lockCache = CacheFactory.GetOrCreateCache(new CacheConfiguration(lockProviderConfiguration, CacheType.NonPersistent));
+                this.DistributedLock = new DisposableLock(lockCache, LockCacheName);
             }
 
             // Cache Type
@@ -110,7 +118,7 @@ namespace Beztek.Facade.Cache
             Stopwatch stopWatch = Stopwatch.StartNew();
 
             // Create a lock
-            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis);
+            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
             try
             {
                 this.Logger?.LogDebug($"Getting item from cache. Key: {key}");
@@ -154,7 +162,7 @@ namespace Beztek.Facade.Cache
             DateTimeOffset start = DateTimeOffset.UtcNow;
             Stopwatch stopWatch = Stopwatch.StartNew();
 
-            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis);
+            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
 
             // Load the original object from the DB if it is there
             T result = await this.GetAsync<T>(key).ConfigureAwait(false);
@@ -205,7 +213,7 @@ namespace Beztek.Facade.Cache
             DateTimeOffset start = DateTimeOffset.UtcNow;
             Stopwatch stopWatch = Stopwatch.StartNew();
 
-            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis);
+            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
 
             // Load the original object from the DB if it is there
             T result = await this.GetAsync<T>(key).ConfigureAwait(false);
@@ -269,7 +277,7 @@ namespace Beztek.Facade.Cache
             DateTimeOffset start = DateTimeOffset.UtcNow;
             Stopwatch stopWatch = Stopwatch.StartNew();
 
-            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis);
+            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
 
             // Load the original object from the DB if it is there
             T result = await this.GetAsync<T>(key).ConfigureAwait(false);
@@ -302,7 +310,7 @@ namespace Beztek.Facade.Cache
             DateTimeOffset start = DateTimeOffset.UtcNow;
             Stopwatch stopWatch = Stopwatch.StartNew();
 
-            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis);
+            using IDisposable currLock = this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
 
             // Load the original object from the DB if it is there
             T result = await this.GetAsync<T>(key).ConfigureAwait(false);
@@ -427,66 +435,23 @@ namespace Beztek.Facade.Cache
             }
         }
 
-        public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis)
+        public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
         {
             // The LockCache itself does not have an internal lockCache, so it should not acquire a lock
-            if (this.lockCache == null)
+            if (this.DistributedLock == null)
             {
                 return null;
             }
 
-            int interval = (int)timeoutMillis / 100;
-            if (interval < 1)
-            {
-                interval = 1;
-            }
-
-            long numAttempts = ((timeoutMillis - 1) / interval) + 1;
-            for (long attempt = 0; attempt < numAttempts; attempt++)
-            {
-                // Check if the lock has been released or if it has expired
-                long[] lockData = this.lockCache.GetAsync<long[]>(lockName).Result;
-                bool isReleasedOrExpired = false;
-                bool isDifferentThread = true;
-                if (lockData == null)
-                {
-                    isReleasedOrExpired = true;
-                }
-                else
-                {
-                    long expiryTimeMillis = lockData[0];
-                    long threadId = lockData[1];
-                    isDifferentThread = threadId != Thread.CurrentThread.ManagedThreadId;
-                    long currTimeMillis = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-                    isReleasedOrExpired = isDifferentThread && currTimeMillis >= expiryTimeMillis;
-                }
-
-                // If there is a lock that is fathered by the same thread, return
-                if (lockData != null && !isDifferentThread)
-                {
-                    lockData[2] = lockData[2] + 1;
-                    this.lockCache.GetAndPutAsync<long[]>(lockName, lockData).Wait();
-                    return new DisposableLock(this.lockCache, lockName);
-                }
-                else if (isReleasedOrExpired)
-                {
-                    // Create one and return
-                    long currTimeMillis = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-                    long expiryTimeMillis = currTimeMillis + lockTimeMillis;
-                    lockData = new long[] { expiryTimeMillis, Thread.CurrentThread.ManagedThreadId, 1 };
-                    this.lockCache.GetAndPutAsync<long[]>(lockName, lockData).Wait();
-                    return new DisposableLock(this.lockCache, lockName);
-                }
-
-                // Could not acquire lock, so sleep and try again in the next iteration
-                Thread.Sleep(interval);
-            }
-
-            // Could not acquire the lock within the timeout, so throw an exception
-            throw new TimeoutException($"Unable to acquire lock: {lockName}");
+            return DistributedLock.AcquireLock(lockName, timeoutMillis, lockTimeMillis, retryIntervalMillis);
         }
 
         // Internal
+
+        private static int CalculateRetryIntervalMillis(long timeoutMillis)
+        {
+            return (int)Math.Min(timeoutMillis / 100, 1);
+        }
 
         /// <summary>
         /// This method is called when we want the cache provider to roll back to the provided value, or remove it from the cache if it is null

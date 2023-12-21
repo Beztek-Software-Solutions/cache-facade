@@ -2,7 +2,6 @@
 
 namespace Beztek.Facade.Cache
 {
-    using System;
     using System.Collections.Generic;
     using System.Threading.Tasks;
     using Beztek.Facade.Sql;
@@ -10,7 +9,7 @@ namespace Beztek.Facade.Cache
     /// <summary>
     /// Interface for cache which provides signatures for the basic operations which we can do on a cache.
     /// </summary>
-    public interface ICache
+    public interface ICache : IDistributedLock
     {
         public CacheType CacheType { get; }
 
@@ -77,15 +76,5 @@ namespace Beztek.Facade.Cache
         /// <param name="keysToFlush" is the collection of keys to be fluhed. If null, the entire cache is flushed></param>
         /// <returns>Sccuess or Failure.</returns>
         Task<bool> FlushAsync<T>(ICollection<string> keysToFlush = null);
-
-        /// <summary>
-        /// Attempts to hold a disposable lock by name within the specified timeout period, to be held for the given lock time. When a different process
-        /// tries to acqire the lock, it blocks until the lock is acquired, and throws a TimeoutException if it cannot be otained in the timeout
-        /// specified. However, multiple methods in the same call stack can call this method, as long as all calls are managed by the same thread.
-        /// </summary>
-        /// <param name="lockName">Name of the distributed lock.</param>
-        /// <param name="timoeutMillis">The time in milliseconds to try to acquire the lock.</param>
-        /// <param name="lockTimeMillis">The time in milliseconds to hold the lock. It will automatically be released after this time</param>
-        IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis);
     }
 }
