@@ -59,39 +59,44 @@ namespace Beztek.Facade.Cache.Providers
 
         public async Task<T> GetAsync<T>(string key)
         {
-            var result = await this.cacheDatabase.StringGetAsync(key).ConfigureAwait(false);
-            return SerializationUtil.Deserialize<T>(SerType, result);
+            return await Task.Run<T>(() => {
+                var result = this.cacheDatabase.StringGet(key);
+                return SerializationUtil.Deserialize<T>(SerType, result);
+           }).ConfigureAwait(false);
         }
 
         public async Task PutAsync<T>(string key, T value)
         {
-            bool result = await this.cacheDatabase.StringSetAsync(key, SerializationUtil.ByteToString(SerializationUtil.Serialize(SerType, value)), this.TimeToLive).ConfigureAwait(false);
-            if (!result)
-            {
-                throw new IOException($"Unable to save the value 'in the cache for key: {key}.");
-            }
+            await Task.Run(() => {
+                bool result = this.cacheDatabase.StringSet(key, SerializationUtil.ByteToString(SerializationUtil.Serialize(SerType, value)), this.TimeToLive);
+                if (!result)
+                {
+                    throw new IOException($"Unable to save the value 'in the cache for key: {key}.");
+                }
+            }).ConfigureAwait(false);
         }
 
         public async Task<T> RemoveAsync<T>(string key)
         {
-            T currentValue = default(T);
-            if (await this.cacheDatabase.KeyExistsAsync(key).ConfigureAwait(false))
-            {
-                string currentValueString = await this.cacheDatabase.StringGetAsync(key).ConfigureAwait(false);
-                if (currentValueString != null)
+            return await Task.Run(() => {
+                T currentValue = default(T);
+                if (this.cacheDatabase.KeyExists(key))
                 {
-                    await this.cacheDatabase.KeyDeleteAsync(key).ConfigureAwait(false);
-                    currentValue = SerializationUtil.Deserialize<T>(SerType, SerializationUtil.StringToByte(currentValueString));
+                    string currentValueString = this.cacheDatabase.StringGet(key);
+                    if (currentValueString != null)
+                    {
+                        this.cacheDatabase.KeyDelete(key);
+                        currentValue = SerializationUtil.Deserialize<T>(SerType, SerializationUtil.StringToByte(currentValueString));
+                    }
                 }
-            }
 
-            return currentValue;
+                return currentValue;
+            }).ConfigureAwait(false);
         }
 
         public async Task<bool> ClearAsync()
         {
-            return await Task.Run( () =>
-            {
+            return await Task.Run(() => {
                 IServer server = LazyConnection.Value.GetServer(this.Endpoint);
                 server.FlushDatabase();
                 return true;

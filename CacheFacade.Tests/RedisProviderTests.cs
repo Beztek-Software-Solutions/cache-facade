@@ -28,7 +28,7 @@ namespace Beztek.Facade.Cache.Tests
         public async Task GetAsyncTest()
         {
             TestCacheable result = new TestCacheable("test-key", "get-result");
-            this.cacheDatabase.Setup(m => m.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ReturnsAsync(Serialize(result));
+            this.cacheDatabase.Setup(m => m.StringGet(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).Returns(Serialize(result));
             TestCacheable operationResult = await this.redisCache.GetAsync<TestCacheable>("test-key").ConfigureAwait(false);
             Assert.IsTrue(object.Equals(result, operationResult));
         }
@@ -37,28 +37,28 @@ namespace Beztek.Facade.Cache.Tests
         public async Task PutAsyncTest()
         {
             TestCacheable result = new TestCacheable("test-key", "getandputasync-result");
-            this.cacheDatabase.Setup(m => m.KeyExistsAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ReturnsAsync(false);
-            this.cacheDatabase.Setup(m => m.StringSetAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>())).ReturnsAsync(true);
+            this.cacheDatabase.Setup(m => m.StringSet(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>())).Returns(true);
             await this.redisCache.PutAsync<TestCacheable>(result.Id, result).ConfigureAwait(false);
-            
-            this.cacheDatabase.Verify(m => m.StringSetAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>()), Times.Once);
+
+            this.cacheDatabase.Verify(m => m.StringSet(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>()), Times.Once);
         }
 
         [Test]
         public async Task PutAsyncExceptionTest()
         {
-            TestCacheable result = new TestCacheable("test-key", "getandputasync-result");
-            this.cacheDatabase.Setup(m => m.KeyExistsAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ReturnsAsync(false);
-            this.cacheDatabase.Setup(m => m.StringSetAsync(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<When>(), It.IsAny<CommandFlags>())).ReturnsAsync(false);
-            Assert.ThrowsAsync<IOException>(async () => await this.redisCache.PutAsync<TestCacheable>(result.Id, result).ConfigureAwait(false));
+            await Task.Run(async () => {
+                TestCacheable result = new TestCacheable("test-key", "getandputasync-result");
+                this.cacheDatabase.Setup(m => m.StringSet(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>())).Returns(false);
+                Assert.ThrowsAsync<IOException>(async () => await this.redisCache.PutAsync<TestCacheable>(result.Id, result));
+            }).ConfigureAwait(false);
         }
 
         [Test]
         public async Task RemoveAsyncTest()
         {
             TestCacheable result = new TestCacheable("test-key", "remove-result");
-            this.cacheDatabase.Setup(m => m.KeyExistsAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ReturnsAsync(true);
-            this.cacheDatabase.Setup(m => m.StringGetAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ReturnsAsync(Serialize(result));
+            this.cacheDatabase.Setup(m => m.KeyExists(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).Returns(true);
+            this.cacheDatabase.Setup(m => m.StringGet(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).Returns(Serialize(result));
             TestCacheable operationResult = await this.redisCache.RemoveAsync<TestCacheable>("test-key").ConfigureAwait(false);
             Assert.AreEqual(result, operationResult);
         }
