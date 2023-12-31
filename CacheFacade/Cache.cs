@@ -51,7 +51,6 @@ namespace Beztek.Facade.Cache
                         Ssl = redisConfiguration.UseSSL
                     };
                     this.DistributedLock = new RedisLock(RedLockFactory.Create(new List<RedLockEndPoint>() { azureEndpoint }));
-
                     break;
                 case LocalMemoryProviderConfiguration localMemoryProviderConfiguration:
                     this.CacheProvider = new LocalMemoryProvider(localMemoryProviderConfiguration);
@@ -118,27 +117,242 @@ namespace Beztek.Facade.Cache
 
         public async Task<T> GetAsync<T>(string key)
         {
-            return await GetAsync<T>(key, false).ConfigureAwait(false);
+            DateTimeOffset start = DateTimeOffset.UtcNow;
+            Stopwatch stopWatch = Stopwatch.StartNew();
+
+            // Create a lock
+            using IDisposable currLock = this.AcquireLock($"_g-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
+            try
+            {
+                this.Logger?.LogDebug($"Getting item from cache. Key: {key}");
+
+                T result = await this.CacheProvider.GetAsync<T>(key).ConfigureAwait(false);
+
+                bool isPersistent = this.CacheType == CacheType.WriteThrough || this.CacheType == CacheType.WriteBehind;
+
+                // If the result is in the cache, or if this is not a persistent cache, we are done
+                if (result != null || !isPersistent)
+                {
+                    return result;
+                }
+
+                // Result is not in the cache, so get it from the persistent store
+                result = (T)await this.PersistenceService.GetByIdAsync(key).ConfigureAwait(false);
+
+                // If we find a result, put it in the cache
+                if (result != null)
+                {
+                    await this.CacheProvider.PutAsync<T>(key, result).ConfigureAwait(false);
+                }
+
+                return result;
+            }
+            catch (Exception e)
+            {
+                string message = $"Error occurred when getting item from cache. Key: {key}";
+                this.Logger?.LogError(e, message);
+                throw new IOException(message, e);
+            }
+            finally
+            {
+                stopWatch.Stop();
+                this.Logger?.LogDebug($"GetAsync/{key}");
+            }
         }
 
         public async Task<T> GetAndPutIfAbsentAsync<T>(string key, T value)
         {
-            return await this.GetAndPutIfAbsentAsync(key, value, false).ConfigureAwait(false);
+            DateTimeOffset start = DateTimeOffset.UtcNow;
+            Stopwatch stopWatch = Stopwatch.StartNew();
+
+            using IDisposable currLock = this.AcquireLock($"_gpa-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
+
+            // Load the original object from the DB if it is there
+            T result = await this.GetAsync<T>(key).ConfigureAwait(false);
+            try
+            {
+                this.Logger?.LogDebug($"CacheProvider GetAndPutIfAbsentAsync. Key: {key}");
+
+                // If there is an item in the cache, return the cached object back as we are done, since the item is not absent
+                if (result != null)
+                {
+                    return result;
+                }
+
+                // There isn't anything in the cache if we get here. Delegate to the cache provider
+                await this.CacheProvider.PutAsync(key, value).ConfigureAwait(false);
+
+                switch (this.CacheType)
+                {
+                    case CacheType.WriteThrough:
+                        await this.PersistenceService.CreateAsync(key, value).ConfigureAwait(false);
+                        break;
+
+                    case CacheType.WriteBehind:
+                        await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
+                        break;
+                }
+
+                return result;
+            }
+            catch (Exception e)
+            {
+                // revert the cache write
+                await this.RollbackCacheValue<T>(key, result).ConfigureAwait(false);
+
+                string message = $"Error occurred during GetAndPutIfAbsentAsync. Key: {key}";
+                this.Logger?.LogError(e, message);
+                throw new IOException(message, e);
+            }
+            finally
+            {
+                stopWatch.Stop();
+                this.Logger?.LogDebug($"GetAndPutIfAbsentAsync/{key}");
+            }
         }
 
         public async Task<T> GetAndReplaceAsync<T>(string key, T value)
         {
-            return await this.GetAndReplaceAsync<T>(key, value, false);
+            DateTimeOffset start = DateTimeOffset.UtcNow;
+            Stopwatch stopWatch = Stopwatch.StartNew();
+
+            using IDisposable currLock = this.AcquireLock($"_gr-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
+
+            // Load the original object from the DB if it is there
+            T result = await this.GetAsync<T>(key).ConfigureAwait(false);
+            try
+            {
+                this.Logger?.LogDebug($"CacheProvider GetAndReplaceAsync. Key: {key}");
+
+                if (result != null)
+                {
+                    IEtagEntity currObject = value as IEtagEntity;
+                    if (currObject != null)
+                    {
+                        if (!string.Equals(((IEtagEntity)result).Etag, currObject.Etag, StringComparison.Ordinal))
+                        {
+                            throw new ConcurrencyException("Object was already updated first");
+                        }
+
+                        // Object is fresh, set with new Etag
+                        currObject.Etag = EtagUtil.GenerateEtag();
+                    }
+
+                    await this.CacheProvider.PutAsync(key, value).ConfigureAwait(false);
+
+                    switch (this.CacheType)
+                    {
+                        case CacheType.WriteThrough:
+                            await this.PersistenceService.UpdateAsync(key, value).ConfigureAwait(false);
+                            break;
+
+                        case CacheType.WriteBehind:
+                            await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
+                            break;
+                    }
+                }
+
+                return result;
+            }
+            catch (ConcurrencyException e)
+            {
+                this.Logger?.LogError(e.Message);
+                throw;
+            }
+            catch (Exception e)
+            {
+                // revert the cache write
+                await this.RollbackCacheValue<T>(key, result).ConfigureAwait(false);
+
+                string message = $"Error occurred during GetAndReplaceAsync. Key: {key}";
+                this.Logger?.LogError(e, message);
+                throw new IOException(message);
+            }
+            finally
+            {
+                stopWatch.Stop();
+                this.Logger?.LogDebug($"GetAndReplaceAsync/{key}");
+            }
         }
 
         public async Task<T> GetAndPutAsync<T>(string key, T value)
         {
-            return await GetAndPutAsync<T>(key, value, true).ConfigureAwait(false);
+            DateTimeOffset start = DateTimeOffset.UtcNow;
+            Stopwatch stopWatch = Stopwatch.StartNew();
+
+            using IDisposable currLock = this.AcquireLock($"_gp-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
+
+            // Load the original object from the DB if it is there
+            T result = await this.GetAsync<T>(key).ConfigureAwait(false);
+            try
+            {
+                bool isCreate = result == null;
+
+                if (isCreate)
+                {
+                    this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Create - Key: {key}");
+                    await this.GetAndPutIfAbsentAsync<T>(key, value).ConfigureAwait(false);
+                }
+                else
+                {
+                    this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Update - Key: {key}");
+                    await this.GetAndReplaceAsync<T>(key, value).ConfigureAwait(false);
+                }
+
+                return result;
+            }
+            finally
+            {
+                stopWatch.Stop();
+                this.Logger?.LogDebug($"GetAndPutAsync/{key}");
+            }
         }
 
         public async Task<T> RemoveAsync<T>(string key)
         {
-            return await RemoveAsync<T>(key, false);
+            DateTimeOffset start = DateTimeOffset.UtcNow;
+            Stopwatch stopWatch = Stopwatch.StartNew();
+
+            using IDisposable currLock = this.AcquireLock($"r-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
+
+            // Load the original object from the DB if it is there
+            T result = await this.GetAsync<T>(key).ConfigureAwait(false);
+            try
+            {
+                this.Logger?.LogDebug($"CacheProvider RemoveAsync. id: {key}");
+
+                await this.CacheProvider.RemoveAsync<T>(key).ConfigureAwait(false);
+
+                switch (this.CacheType)
+                {
+                    case CacheType.WriteThrough:
+                        await this.PersistenceService.DeleteAsync(key).ConfigureAwait(false);
+                        break;
+
+                    case CacheType.WriteBehind:
+                        await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
+                        break;
+                }
+
+                return result;
+            }
+            catch (Exception e)
+            {
+                // revert the cache write
+                if (result != null)
+                {
+                    await this.CacheProvider.PutAsync(key, result).ConfigureAwait(false);
+                }
+
+                string message = $"Error occurred when removing item from cache. Key: {key}";
+                this.Logger?.LogError(e, message);
+                throw new IOException(message, e);
+            }
+            finally
+            {
+                stopWatch.Stop();
+                this.Logger?.LogDebug($"RemoveAsync/{key}");
+            }
         }
 
         public async Task<PagedResults<T>> SearchByQueryAsync<T>(SqlSelect query, int pageNum, int pageSize, bool retrieveTotalNumResults = false)
@@ -150,7 +364,7 @@ namespace Beztek.Facade.Cache
                 List<Task<T>> tasks = new List<Task<T>>();
                 foreach (string id in pagedIds.PagedList)
                 {
-                    tasks.Add(this.GetAsync<T>(id, true));
+                    tasks.Add(this.GetAsync<T>(id));
                 }
 
                 List<T> results = new List<T>();
@@ -236,246 +450,6 @@ namespace Beztek.Facade.Cache
         }
 
         // Internal
-
-        internal async Task<T> GetAsync<T>(string key, bool isInternal)
-        {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
-            // Create a lock
-            using IDisposable currLock = isInternal ? null : this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
-            try
-            {
-                this.Logger?.LogDebug($"Getting item from cache. Key: {key}");
-
-                T result = await this.CacheProvider.GetAsync<T>(key).ConfigureAwait(false);
-
-                bool isPersistent = this.CacheType == CacheType.WriteThrough || this.CacheType == CacheType.WriteBehind;
-
-                // If the result is in the cache, or if this is not a persistent cache, we are done
-                if (result != null || !isPersistent)
-                {
-                    return result;
-                }
-
-                // Result is not in the cache, so get it from the persistent store
-                result = (T)await this.PersistenceService.GetByIdAsync(key).ConfigureAwait(false);
-
-                // If we find a result, put it in the cache
-                if (result != null)
-                {
-                    await this.CacheProvider.PutAsync<T>(key, result).ConfigureAwait(false);
-                }
-
-                return result;
-            }
-            catch (Exception e)
-            {
-                string message = $"Error occurred when getting item from cache. Key: {key}";
-                this.Logger?.LogError(e, message);
-                throw new IOException(message, e);
-            }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"GetAsync/{key}");
-            }
-        }
-
-        internal async Task<T> GetAndPutIfAbsentAsync<T>(string key, T value, bool isInternal)
-        {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
-            using IDisposable currLock = isInternal ? null : this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
-
-            // Load the original object from the DB if it is there
-            T result = await this.GetAsync<T>(key, true).ConfigureAwait(false);
-            try
-            {
-                this.Logger?.LogDebug($"CacheProvider GetAndPutIfAbsentAsync. Key: {key}");
-
-                // If there is an item in the cache, return the cached object back as we are done, since the item is not absent
-                if (result != null)
-                {
-                    return result;
-                }
-
-                // There isn't anything in the cache if we get here. Delegate to the cache provider
-                await this.CacheProvider.PutAsync(key, value).ConfigureAwait(false);
-
-                switch (this.CacheType)
-                {
-                    case CacheType.WriteThrough:
-                        await this.PersistenceService.CreateAsync(key, value).ConfigureAwait(false);
-                        break;
-
-                    case CacheType.WriteBehind:
-                        await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
-                        break;
-                }
-
-                return result;
-            }
-            catch (Exception e)
-            {
-                // revert the cache write
-                await this.RollbackCacheValue<T>(key, result).ConfigureAwait(false);
-
-                string message = $"Error occurred during GetAndPutIfAbsentAsync. Key: {key}";
-                this.Logger?.LogError(e, message);
-                throw new IOException(message, e);
-            }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"GetAndPutIfAbsentAsync/{key}");
-            }
-        }
-
-        internal async Task<T> GetAndReplaceAsync<T>(string key, T value, bool isInternal)
-        {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
-            using IDisposable currLock = isInternal ? null : this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
-
-            // Load the original object from the DB if it is there
-            T result = await this.GetAsync<T>(key, true).ConfigureAwait(false);
-            try
-            {
-                this.Logger?.LogDebug($"CacheProvider GetAndReplaceAsync. Key: {key}");
-
-                if (result != null)
-                {
-                    IEtagEntity currObject = value as IEtagEntity;
-                    if (currObject != null)
-                    {
-                        if (!string.Equals(((IEtagEntity)result).Etag, currObject.Etag, StringComparison.Ordinal))
-                        {
-                            throw new ConcurrencyException("Object was already updated first");
-                        }
-
-                        // Object is fresh, set with new Etag
-                        currObject.Etag = EtagUtil.GenerateEtag();
-                    }
-
-                    await this.CacheProvider.PutAsync(key, value).ConfigureAwait(false);
-
-                    switch (this.CacheType)
-                    {
-                        case CacheType.WriteThrough:
-                            await this.PersistenceService.UpdateAsync(key, value).ConfigureAwait(false);
-                            break;
-
-                        case CacheType.WriteBehind:
-                            await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
-                            break;
-                    }
-                }
-
-                return result;
-            }
-            catch (ConcurrencyException e)
-            {
-                this.Logger?.LogError(e.Message);
-                throw;
-            }
-            catch (Exception e)
-            {
-                // revert the cache write
-                await this.RollbackCacheValue<T>(key, result).ConfigureAwait(false);
-
-                string message = $"Error occurred during GetAndReplaceAsync. Key: {key}";
-                this.Logger?.LogError(e, message);
-                throw new IOException(message);
-            }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"GetAndReplaceAsync/{key}");
-            }
-        }
-
-        internal async Task<T> GetAndPutAsync<T>(string key, T value, bool isInternal)
-        {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
-            using IDisposable currLock = isInternal ? null : this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
-
-            // Load the original object from the DB if it is there
-            T result = await this.GetAsync<T>(key, true).ConfigureAwait(false);
-            try
-            {
-                bool isCreate = result == null;
-
-                if (isCreate)
-                {
-                    this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Create - Key: {key}");
-                    await this.GetAndPutIfAbsentAsync<T>(key, value, true).ConfigureAwait(false);
-                }
-                else
-                {
-                    this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Update - Key: {key}");
-                    await this.GetAndReplaceAsync<T>(key, value, true).ConfigureAwait(false);
-                }
-
-                return result;
-            }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"GetAndPutAsync/{key}");
-            }
-        }
-
-        internal async Task<T> RemoveAsync<T>(string key, bool isInternal)
-        {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
-            using IDisposable currLock = isInternal ? null : this.AcquireLock(key, LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
-
-            // Load the original object from the DB if it is there
-            T result = await this.GetAsync<T>(key, true).ConfigureAwait(false);
-            try
-            {
-                this.Logger?.LogDebug($"CacheProvider RemoveAsync. id: {key}");
-
-                await this.CacheProvider.RemoveAsync<T>(key).ConfigureAwait(false);
-
-                switch (this.CacheType)
-                {
-                    case CacheType.WriteThrough:
-                        await this.PersistenceService.DeleteAsync(key).ConfigureAwait(false);
-                        break;
-
-                    case CacheType.WriteBehind:
-                        await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
-                        break;
-                }
-
-                return result;
-            }
-            catch (Exception e)
-            {
-                // revert the cache write
-                if (result != null)
-                {
-                    await this.CacheProvider.PutAsync(key, result).ConfigureAwait(false);
-                }
-
-                string message = $"Error occurred when removing item from cache. Key: {key}";
-                this.Logger?.LogError(e, message);
-                throw new IOException(message, e);
-            }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"RemoveAsync/{key}");
-            }
-        }
 
         private static int CalculateRetryIntervalMillis(long timeoutMillis)
         {

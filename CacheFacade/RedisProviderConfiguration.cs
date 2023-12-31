@@ -15,7 +15,6 @@ namespace Beztek.Facade.Cache
         /// <param name="abortConnection">Flags whether to abort connections or not</param>
         /// <param name="password">Redis server password.</param>
         /// <param name="nameIndex">Partition index of cache (optional, defaults to 0). (Note: the lockCache uses index 1)</param>
-        /// <param name="InMemoryLock">RedLock (RedisLock), library lock with Redis or in-memory lock (will not be distributed)</param>
         public RedisProviderConfiguration(string endpoint, string password, string cacheName, bool useSSL=true, bool abortConnection=false, long timeToLiveMillis=3600000, int nameIndex = 0)
         {
             this.CacheName = cacheName;
