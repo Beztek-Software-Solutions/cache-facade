@@ -191,7 +191,7 @@ namespace Beztek.Facade.Cache.Tests
 
             TestEtagCacheable operationResult = await cache.GetAndReplaceAsync<TestEtagCacheable>(oldResult.Id, newResult).ConfigureAwait(false);
             Assert.AreEqual(oldResult, operationResult);
-            Assert.AreEqual(newResult, await cache.CacheProvider.GetAsync<TestEtagCacheable>(oldResult.Id).ConfigureAwait(false));
+            Assert.AreEqual(newResult, cache.CacheProvider.Get<TestEtagCacheable>(oldResult.Id));
 
             if (cache.PersistenceService != null)
             {
@@ -217,7 +217,7 @@ namespace Beztek.Facade.Cache.Tests
             TestEtagCacheable operationResult = await cache.GetAndPutAsync<TestEtagCacheable>(newResult.Id, newResult).ConfigureAwait(false);
             Assert.AreEqual(oldResult, operationResult);
 
-            Assert.AreEqual(newResult, await cache.CacheProvider.GetAsync<TestEtagCacheable>(newResult.Id).ConfigureAwait(false));
+            Assert.AreEqual(newResult, cache.CacheProvider.Get<TestEtagCacheable>(newResult.Id));
             if (cache.PersistenceService != null)
             {
                 await Task.Run(async () => {
@@ -332,7 +332,7 @@ namespace Beztek.Facade.Cache.Tests
                 }
             ).ConfigureAwait(false);
 
-            Assert.AreEqual(v5, await cache.CacheProvider.GetAsync<TestEtagCacheable>(v1.Id).ConfigureAwait(false));
+            Assert.AreEqual(v5, cache.CacheProvider.Get<TestEtagCacheable>(v1.Id));
             Assert.AreEqual("v5", v5.Value);
 
             // Should match what is in the DB
@@ -403,7 +403,7 @@ namespace Beztek.Facade.Cache.Tests
             await cache.RemoveAsync<TestEtagCacheable>(v2.Id).ConfigureAwait(false);
             await cache.GetAndPutIfAbsentAsync<TestEtagCacheable>(v2.Id, v2).ConfigureAwait(false);
 
-            Assert.AreEqual(v2, await cache.CacheProvider.GetAsync<TestEtagCacheable>(v1.Id).ConfigureAwait(false));
+            Assert.AreEqual(v2, cache.CacheProvider.Get<TestEtagCacheable>(v1.Id));
 
             // Should match what is in the DB
             await Task.Run(async () => {

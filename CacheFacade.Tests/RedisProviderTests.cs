@@ -25,11 +25,11 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
-        public async Task GetAsyncTest()
+        public async Task GetTest()
         {
             TestCacheable result = new TestCacheable("test-key", "get-result");
             this.cacheDatabase.Setup(m => m.StringGet(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).Returns(Serialize(result));
-            TestCacheable operationResult = await this.redisCache.GetAsync<TestCacheable>("test-key").ConfigureAwait(false);
+            TestCacheable operationResult = this.redisCache.Get<TestCacheable>("test-key");
             Assert.IsTrue(object.Equals(result, operationResult));
         }
 
@@ -38,7 +38,7 @@ namespace Beztek.Facade.Cache.Tests
         {
             TestCacheable result = new TestCacheable("test-key", "getandputasync-result");
             this.cacheDatabase.Setup(m => m.StringSet(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>())).Returns(true);
-            await this.redisCache.PutAsync<TestCacheable>(result.Id, result).ConfigureAwait(false);
+            this.redisCache.Put<TestCacheable>(result.Id, result);
 
             this.cacheDatabase.Verify(m => m.StringSet(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>()), Times.Once);
         }
@@ -49,7 +49,7 @@ namespace Beztek.Facade.Cache.Tests
             await Task.Run(async () => {
                 TestCacheable result = new TestCacheable("test-key", "getandputasync-result");
                 this.cacheDatabase.Setup(m => m.StringSet(It.IsAny<RedisKey>(), It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), It.IsAny<bool>(), It.IsAny<When>(), It.IsAny<CommandFlags>())).Returns(false);
-                Assert.ThrowsAsync<IOException>(async () => await this.redisCache.PutAsync<TestCacheable>(result.Id, result));
+                Assert.ThrowsAsync<IOException>(async () => this.redisCache.Put<TestCacheable>(result.Id, result));
             }).ConfigureAwait(false);
         }
 
@@ -59,7 +59,7 @@ namespace Beztek.Facade.Cache.Tests
             TestCacheable result = new TestCacheable("test-key", "remove-result");
             this.cacheDatabase.Setup(m => m.KeyExists(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).Returns(true);
             this.cacheDatabase.Setup(m => m.StringGet(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).Returns(Serialize(result));
-            TestCacheable operationResult = await this.redisCache.RemoveAsync<TestCacheable>("test-key").ConfigureAwait(false);
+            TestCacheable operationResult = this.redisCache.Remove<TestCacheable>("test-key");
             Assert.AreEqual(result, operationResult);
         }
 

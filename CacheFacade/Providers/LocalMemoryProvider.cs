@@ -26,23 +26,23 @@ namespace Beztek.Facade.Cache.Providers
             this.cacheItemPolicy.AbsoluteExpiration = DateTimeOffset.UtcNow.AddMilliseconds(localMemoryCacheConfiguration.TimeToLiveMillis);
         }
 
-        public async Task<T> GetAsync<T>(string key)
+        public T Get<T>(string key)
         {
             byte[] result = (byte[])this.localMemoryCache.Get(key);
             return Deserialize<T>(result);
         }
 
-        public async Task PutAsync<T>(string key, T value)
+        public void Put<T>(string key, T value)
         {
             this.localMemoryCache.Set(key, Serialize(value), this.cacheItemPolicy);
         }
 
-        public async Task<T> RemoveAsync<T>(string key)
+        public T Remove<T>(string key)
         {
             return Deserialize<T>((byte[])this.localMemoryCache.Remove(key));
         }
 
-        public async Task<bool> ClearAsync()
+        public bool Clear()
         {
             var allKeys = this.localMemoryCache.Select(o => o.Key);
             Parallel.ForEach(allKeys, key => this.localMemoryCache.Remove(key));

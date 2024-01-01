@@ -34,15 +34,15 @@ namespace Beztek.Facade.Cache.Tests
         public async Task GetAsyncTest()
         {
             TestCacheable result = new TestCacheable("test-key", "get-result");
-            this.CacheProvider.Setup(m => m.GetAsync<TestCacheable>(It.IsAny<string>())).ReturnsAsync(result);
+            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(result);
             TestCacheable operationResult = await this.Cache.GetAsync<TestCacheable>("test-key").ConfigureAwait(false);
             Assert.AreEqual(result, operationResult);
         }
 
         [Test]
-        public async Task GetAsyncExceptionTest()
+        public void GetAsyncExceptionTest()
         {
-            this.CacheProvider.Setup(m => m.GetAsync<TestCacheable>(It.IsAny<string>())).Throws(new Exception("dummy-exception"));
+            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Throws(new Exception("dummy-exception"));
             Assert.ThrowsAsync<IOException>(async () => await this.Cache.GetAsync<TestCacheable>("test-key").ConfigureAwait(false));
         }
 
@@ -50,7 +50,7 @@ namespace Beztek.Facade.Cache.Tests
         public async Task GetAndPutAsyncKeyExistsTest()
         {
             TestCacheable result = new TestCacheable("test-key", "getandputifabsentasync-result");
-            this.CacheProvider.Setup(m => m.GetAsync<TestCacheable>(It.IsAny<string>())).ReturnsAsync(result);
+            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(result);
             TestCacheable operationResult = await this.Cache.GetAndPutIfAbsentAsync<TestCacheable>(result.Id, result).ConfigureAwait(false);
             Assert.AreEqual(result, operationResult);
         }
@@ -64,10 +64,10 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
-        public async Task GetAndPutAsyncExceptionTest()
+        public void GetAndPutAsyncExceptionTest()
         {
             TestCacheable result = new TestCacheable("test-key", "getandputifabsentasync-result");
-            this.CacheProvider.Setup(m => m.PutAsync(It.IsAny<string>(), It.IsAny<TestCacheable>())).Throws(new Exception("dummy-exception"));
+            this.CacheProvider.Setup(m => m.Put(It.IsAny<string>(), It.IsAny<TestCacheable>())).Throws(new Exception("dummy-exception"));
             Assert.ThrowsAsync<IOException>(async () => await this.Cache.GetAndPutIfAbsentAsync<TestCacheable>(result.Id, result).ConfigureAwait(false));
         }
 
@@ -75,31 +75,31 @@ namespace Beztek.Facade.Cache.Tests
         public async Task RemoveAsyncTest()
         {
             TestCacheable result = new TestCacheable("test-key", "getandputasync-result");
-            this.CacheProvider.Setup(m => m.GetAsync<TestCacheable>(It.IsAny<string>())).ReturnsAsync(result);
-            this.CacheProvider.Setup(m => m.RemoveAsync<TestCacheable>(It.IsAny<string>())).ReturnsAsync(result);
+            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(result);
+            this.CacheProvider.Setup(m => m.Remove<TestCacheable>(It.IsAny<string>())).Returns(result);
             TestCacheable operationResult = await this.Cache.RemoveAsync<TestCacheable>("test-key").ConfigureAwait(false);
             Assert.AreEqual(result, operationResult);
         }
 
         [Test]
-        public async Task RemoveAsyncExceptionTest()
+        public void RemoveAsyncExceptionTest()
         {
-            this.CacheProvider.Setup(m => m.RemoveAsync<TestCacheable>(It.IsAny<string>())).Throws(new Exception("dummy-exception"));
+            this.CacheProvider.Setup(m => m.Remove<TestCacheable>(It.IsAny<string>())).Throws(new Exception("dummy-exception"));
             Assert.ThrowsAsync<IOException>(async () => await this.Cache.RemoveAsync<TestCacheable>("test-key").ConfigureAwait(false));
         }
 
         [Test]
         public async Task FlushAlleAsyncTest()
         {
-            this.CacheProvider.Setup(m => m.ClearAsync()).ReturnsAsync(true);
+            this.CacheProvider.Setup(m => m.Clear()).Returns(true);
             bool result = await this.Cache.FlushAsync<object>().ConfigureAwait(false);
             Assert.IsTrue(result);
         }
 
         [Test]
-        public async Task FlushAlleAsyncExceptionTest()
+        public void FlushAlleAsyncExceptionTest()
         {
-            this.CacheProvider.Setup(m => m.ClearAsync()).Throws(new Exception("dummy-exception"));
+            this.CacheProvider.Setup(m => m.Clear()).Throws(new Exception("dummy-exception"));
             Assert.ThrowsAsync<IOException>(async () => await this.Cache.FlushAsync<object>().ConfigureAwait(false));
         }
 
@@ -107,18 +107,18 @@ namespace Beztek.Facade.Cache.Tests
         public async Task FlushSpecificeAsyncTest()
         {
             TestCacheable cacheable = new TestCacheable("test-key", "getandputasync-result");
-            this.CacheProvider.Setup(m => m.GetAsync<TestCacheable>(It.IsAny<string>())).ReturnsAsync(cacheable);
-            this.CacheProvider.Setup(m => m.RemoveAsync<TestCacheable>(It.IsAny<string>())).ReturnsAsync(cacheable);
+            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(cacheable);
+            this.CacheProvider.Setup(m => m.Remove<TestCacheable>(It.IsAny<string>())).Returns(cacheable);
             bool result = await this.Cache.FlushKeyAsync<TestCacheable>(cacheable.Id).ConfigureAwait(false);
             Assert.IsTrue(result);
         }
 
         [Test]
-        public async Task FlushAsyncExceptionTest()
+        public void FlushAsyncExceptionTest()
         {
             TestCacheable cacheable = new TestCacheable("test-key", "getandputasync-result");
-            this.CacheProvider.Setup(m => m.GetAsync<TestCacheable>(It.IsAny<string>())).ReturnsAsync(cacheable);
-            this.CacheProvider.Setup(m => m.RemoveAsync<TestCacheable>(It.IsAny<string>())).Throws(new IOException("dummy-exception"));
+            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(cacheable);
+            this.CacheProvider.Setup(m => m.Remove<TestCacheable>(It.IsAny<string>())).Throws(new IOException("dummy-exception"));
             Assert.ThrowsAsync<IOException>(async () => await this.Cache.FlushKeyAsync<TestCacheable>(cacheable.Id).ConfigureAwait(false));
         }
     }

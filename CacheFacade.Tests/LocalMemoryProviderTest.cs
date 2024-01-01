@@ -2,8 +2,6 @@
 
 namespace Beztek.Facade.Cache.Tests
 {
-    using System.Threading.Tasks;
-
     using Beztek.Facade.Cache;
     using Beztek.Facade.Cache.Providers;
     using NUnit.Framework;
@@ -20,55 +18,55 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
-        public async Task GetAsyncTest()
+        public void GetTest()
         {
             TestCacheable result = new TestCacheable("GetAsyncTest-key", "get-result");
-            await this.localMemoryCacheProvider.PutAsync(result.Id, result).ConfigureAwait(false);
-            TestCacheable operationResult = await this.localMemoryCacheProvider.GetAsync<TestCacheable>(result.Id).ConfigureAwait(false);
+            this.localMemoryCacheProvider.Put(result.Id, result);
+            TestCacheable operationResult = this.localMemoryCacheProvider.Get<TestCacheable>(result.Id);
             Assert.AreEqual(result, operationResult);
         }
 
         [Test]
-        public async Task GetAsyncKeyNotExistTest()
+        public void GetKeyNotExistTest()
         {
-            TestCacheable operationResult = await this.localMemoryCacheProvider.GetAsync<TestCacheable>("GetAsyncKeyNotExistTest-key").ConfigureAwait(false);
+            TestCacheable operationResult = this.localMemoryCacheProvider.Get<TestCacheable>("GetAsyncKeyNotExistTest-key");
             Assert.IsNull(operationResult);
         }
 
         [Test]
-        public async Task PutAsyncTest()
+        public void PutTest()
         {
             TestCacheable result = new TestCacheable("PutAsyncTest-key", "putasync-result");
-            await this.localMemoryCacheProvider.PutAsync<TestCacheable>(result.Id, result).ConfigureAwait(false);
-            Assert.AreEqual(result, await this.localMemoryCacheProvider.GetAsync<TestCacheable>(result.Id).ConfigureAwait(false));
+            this.localMemoryCacheProvider.Put<TestCacheable>(result.Id, result);
+            Assert.AreEqual(result, this.localMemoryCacheProvider.Get<TestCacheable>(result.Id));
         }
 
         [Test]
-        public async Task RemoveAsyncKeyExistsTest()
+        public void RemoveKeyExistsTest()
         {
             TestCacheable result = new TestCacheable("RemoveAsyncKeyExistsTest-key", "getandputasync-result");
-            await this.localMemoryCacheProvider.PutAsync(result.Id, result).ConfigureAwait(false);
-            TestCacheable operationResult = await this.localMemoryCacheProvider.RemoveAsync<TestCacheable>("RemoveAsyncKeyExistsTest-key").ConfigureAwait(false);
+            this.localMemoryCacheProvider.Put(result.Id, result);
+            TestCacheable operationResult = this.localMemoryCacheProvider.Remove<TestCacheable>("RemoveAsyncKeyExistsTest-key");
             Assert.AreEqual(result, operationResult);
-            Assert.IsNull(await this.localMemoryCacheProvider.GetAsync<TestCacheable>(result.Id).ConfigureAwait(false));
+            Assert.IsNull(this.localMemoryCacheProvider.Get<TestCacheable>(result.Id));
         }
 
         [Test]
-        public async Task RemoveAsyncKeyNotExistsTest()
+        public void RemoveKeyNotExistsTest()
         {
-            TestCacheable operationResult = await this.localMemoryCacheProvider.RemoveAsync<TestCacheable>("RemoveAsyncKeyNotExistsTest-key").ConfigureAwait(false);
+            TestCacheable operationResult = this.localMemoryCacheProvider.Remove<TestCacheable>("RemoveAsyncKeyNotExistsTest-key");
             Assert.IsNull(operationResult);
-            Assert.IsNull(await this.localMemoryCacheProvider.GetAsync<TestCacheable>("RemoveAsyncKeyNotExistsTest-key").ConfigureAwait(false));
+            Assert.IsNull(this.localMemoryCacheProvider.Get<TestCacheable>("RemoveAsyncKeyNotExistsTest-key"));
         }
 
         [Test]
-        public async Task ClearAsyncTest()
+        public void ClearTest()
         {
             TestCacheable result = new TestCacheable("ClearAsyncTest-key", "ClearAsyncTest-result");
-            await this.localMemoryCacheProvider.PutAsync(result.Id, result).ConfigureAwait(false);
-            Assert.AreEqual(result, await this.localMemoryCacheProvider.GetAsync<TestCacheable>("ClearAsyncTest-key").ConfigureAwait(false));
-            await this.localMemoryCacheProvider.ClearAsync().ConfigureAwait(false);
-            Assert.IsNull(await this.localMemoryCacheProvider.GetAsync<TestCacheable>("ClearAsyncTest-key").ConfigureAwait(false));
+            this.localMemoryCacheProvider.Put(result.Id, result);
+            Assert.AreEqual(result, this.localMemoryCacheProvider.Get<TestCacheable>("ClearAsyncTest-key"));
+            this.localMemoryCacheProvider.Clear();
+            Assert.IsNull(this.localMemoryCacheProvider.Get<TestCacheable>("ClearAsyncTest-key"));
         }
     }
 }

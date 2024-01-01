@@ -4,7 +4,6 @@ namespace Beztek.Facade.Cache
 {
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics;
     using System.IO;
     using System.Net;
     using System.Threading.Tasks;
@@ -26,15 +25,20 @@ namespace Beztek.Facade.Cache
         private const string LockCacheName = "lockCache";
         private const long LockTimeToLiveMillis = 3000;
         private const long LockAcquireTimeoutMillis = 1000;
+
+        public CacheType CacheType { get; }
+        internal ICacheProvider CacheProvider { get; set; }
+        internal IPersistenceService PersistenceService { get; }
         private readonly QueueClient queueClient;
         private readonly IDistributedLock DistributedLock;
+        protected ILogger Logger { get; set; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Cache"/> class using cache configuration and logger object.
         /// </summary>
         /// <param name="cacheConfiguration">Cache configuration object.</param>
         /// <param name="logger">Logger object.</param>
-        public Cache(CacheConfiguration cacheConfiguration, ILogger logger)
+        internal Cache(CacheConfiguration cacheConfiguration, ILogger logger)
         {
             this.Logger = logger;
 
@@ -106,27 +110,15 @@ namespace Beztek.Facade.Cache
                 this.PersistenceService = cacheConfiguration.PersistenceService;
             }
         }
-
-        internal IPersistenceService PersistenceService { get; }
-
-        internal ICacheProvider CacheProvider { get; set; }
-
-        public CacheType CacheType { get; }
-
-        protected ILogger Logger { get; set; }
-
         public async Task<T> GetAsync<T>(string key)
         {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
             // Create a lock
             using IDisposable currLock = this.AcquireLock($"_g-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
             try
             {
                 this.Logger?.LogDebug($"Getting item from cache. Key: {key}");
 
-                T result = await this.CacheProvider.GetAsync<T>(key).ConfigureAwait(false);
+                T result = this.CacheProvider.Get<T>(key);
 
                 bool isPersistent = this.CacheType == CacheType.WriteThrough || this.CacheType == CacheType.WriteBehind;
 
@@ -142,7 +134,7 @@ namespace Beztek.Facade.Cache
                 // If we find a result, put it in the cache
                 if (result != null)
                 {
-                    await this.CacheProvider.PutAsync<T>(key, result).ConfigureAwait(false);
+                    this.CacheProvider.Put<T>(key, result);
                 }
 
                 return result;
@@ -153,18 +145,10 @@ namespace Beztek.Facade.Cache
                 this.Logger?.LogError(e, message);
                 throw new IOException(message, e);
             }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"GetAsync/{key}");
-            }
         }
 
         public async Task<T> GetAndPutIfAbsentAsync<T>(string key, T value)
         {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
             using IDisposable currLock = this.AcquireLock($"_gpa-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
 
             // Load the original object from the DB if it is there
@@ -180,7 +164,7 @@ namespace Beztek.Facade.Cache
                 }
 
                 // There isn't anything in the cache if we get here. Delegate to the cache provider
-                await this.CacheProvider.PutAsync(key, value).ConfigureAwait(false);
+                this.CacheProvider.Put(key, value);
 
                 switch (this.CacheType)
                 {
@@ -204,18 +188,10 @@ namespace Beztek.Facade.Cache
                 this.Logger?.LogError(e, message);
                 throw new IOException(message, e);
             }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"GetAndPutIfAbsentAsync/{key}");
-            }
         }
 
         public async Task<T> GetAndReplaceAsync<T>(string key, T value)
         {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
             using IDisposable currLock = this.AcquireLock($"_gr-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
 
             // Load the original object from the DB if it is there
@@ -238,7 +214,7 @@ namespace Beztek.Facade.Cache
                         currObject.Etag = EtagUtil.GenerateEtag();
                     }
 
-                    await this.CacheProvider.PutAsync(key, value).ConfigureAwait(false);
+                    this.CacheProvider.Put(key, value);
 
                     switch (this.CacheType)
                     {
@@ -268,51 +244,33 @@ namespace Beztek.Facade.Cache
                 this.Logger?.LogError(e, message);
                 throw new IOException(message);
             }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"GetAndReplaceAsync/{key}");
-            }
         }
 
         public async Task<T> GetAndPutAsync<T>(string key, T value)
         {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
             using IDisposable currLock = this.AcquireLock($"_gp-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
 
             // Load the original object from the DB if it is there
             T result = await this.GetAsync<T>(key).ConfigureAwait(false);
-            try
-            {
-                bool isCreate = result == null;
 
-                if (isCreate)
-                {
-                    this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Create - Key: {key}");
-                    await this.GetAndPutIfAbsentAsync<T>(key, value).ConfigureAwait(false);
-                }
-                else
-                {
-                    this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Update - Key: {key}");
-                    await this.GetAndReplaceAsync<T>(key, value).ConfigureAwait(false);
-                }
+            bool isCreate = result == null;
 
-                return result;
-            }
-            finally
+            if (isCreate)
             {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"GetAndPutAsync/{key}");
+                this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Create - Key: {key}");
+                await this.GetAndPutIfAbsentAsync<T>(key, value).ConfigureAwait(false);
             }
+            else
+            {
+                this.Logger?.LogDebug($"CacheProvider GetAndPutAsync : Update - Key: {key}");
+                await this.GetAndReplaceAsync<T>(key, value).ConfigureAwait(false);
+            }
+
+            return result;
         }
 
         public async Task<T> RemoveAsync<T>(string key)
         {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
             using IDisposable currLock = this.AcquireLock($"r-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
 
             // Load the original object from the DB if it is there
@@ -321,7 +279,7 @@ namespace Beztek.Facade.Cache
             {
                 this.Logger?.LogDebug($"CacheProvider RemoveAsync. id: {key}");
 
-                await this.CacheProvider.RemoveAsync<T>(key).ConfigureAwait(false);
+                this.CacheProvider.Remove<T>(key);
 
                 switch (this.CacheType)
                 {
@@ -341,17 +299,12 @@ namespace Beztek.Facade.Cache
                 // revert the cache write
                 if (result != null)
                 {
-                    await this.CacheProvider.PutAsync(key, result).ConfigureAwait(false);
+                    this.CacheProvider.Put(key, result);
                 }
 
                 string message = $"Error occurred when removing item from cache. Key: {key}";
                 this.Logger?.LogError(e, message);
                 throw new IOException(message, e);
-            }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"RemoveAsync/{key}");
             }
         }
 
@@ -385,56 +338,42 @@ namespace Beztek.Facade.Cache
             throw new NotSupportedException();
         }
 
-        public async Task<bool> FlushKeyAsync<T>(string key)
+        public Task<bool> FlushKeyAsync<T>(string key)
         {
             if (key != null)
             {
-                return await this.FlushAsync<T>(new string[] { key }).ConfigureAwait(false);
+                this.CacheProvider.Remove<T>(key);
+                return Task.FromResult(true);
             }
 
-            return false;
+            return Task.FromResult(false);
         }
 
         public async Task<bool> FlushAsync<T>(ICollection<string> keysToFlush = null)
         {
-            DateTimeOffset start = DateTimeOffset.UtcNow;
-            Stopwatch stopWatch = Stopwatch.StartNew();
-
-            try
+            if (keysToFlush == null)
             {
-                if (keysToFlush == null)
+                try
                 {
-                    try
-                    {
-                        return await this.CacheProvider.ClearAsync().ConfigureAwait(false);
-                    }
-                    catch (Exception e)
-                    {
-                        string message = "Error occurred when flushing the cache. Ke";
-                        this.Logger?.LogError(e, message);
-                        throw new IOException(message, e);
-                    }
+                    return this.CacheProvider.Clear();
                 }
-
+                catch (Exception e)
+                {
+                    string message = "Error occurred when flushing the cache. Ke";
+                    this.Logger?.LogError(e, message);
+                    throw new IOException(message, e);
+                }
+            }
+            else
+            {
                 // Remove each id individually
-                IList<Task> results = new List<Task>();
+                List<Task> tasks = new List<Task>();
                 foreach (string key in keysToFlush)
                 {
-                    results.Add(this.CacheProvider.RemoveAsync<T>(key));
+                    tasks.Add(this.FlushKeyAsync<T>(key));
                 }
-
-                // Wait for all the removals to compplete
-                foreach (Task refreshTask in results)
-                {
-                    await refreshTask.ConfigureAwait(false);
-                }
-
+                await Task.WhenAll(tasks).ConfigureAwait(false);
                 return true;
-            }
-            finally
-            {
-                stopWatch.Stop();
-                this.Logger?.LogDebug($"FlushAsync");
             }
         }
 
@@ -467,11 +406,11 @@ namespace Beztek.Facade.Cache
         {
             if (value != null)
             {
-                await this.CacheProvider.PutAsync(key, value).ConfigureAwait(false);
+                this.CacheProvider.Put(key, value);
             }
             else
             {
-                await this.CacheProvider.RemoveAsync<T>(key).ConfigureAwait(false);
+                this.CacheProvider.Remove<T>(key);
             }
         }
     }

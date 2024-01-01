@@ -4,7 +4,6 @@ namespace Beztek.Facade.Cache.Providers
 {
     using System;
     using System.IO;
-    using System.Threading.Tasks;
 
     using StackExchange.Redis;
 
@@ -57,13 +56,13 @@ namespace Beztek.Facade.Cache.Providers
         /// </summary>
         private static ConfigurationOptions ConnectionConfig { get; set; }
 
-        public async Task<T> GetAsync<T>(string key)
+        public T Get<T>(string key)
         {
             var result = this.cacheDatabase.StringGet(key);
             return SerializationUtil.Deserialize<T>(SerType, result);
         }
 
-        public async Task PutAsync<T>(string key, T value)
+        public void Put<T>(string key, T value)
         {
             bool result = this.cacheDatabase.StringSet(key, SerializationUtil.ByteToString(SerializationUtil.Serialize(SerType, value)), this.TimeToLive);
             if (!result)
@@ -72,7 +71,7 @@ namespace Beztek.Facade.Cache.Providers
             }
         }
 
-        public async Task<T> RemoveAsync<T>(string key)
+        public T Remove<T>(string key)
         {
             T currentValue = default(T);
             if (this.cacheDatabase.KeyExists(key))
@@ -88,7 +87,7 @@ namespace Beztek.Facade.Cache.Providers
             return currentValue;
         }
 
-        public async Task<bool> ClearAsync()
+        public bool Clear()
         {
             IServer server = LazyConnection.Value.GetServer(this.Endpoint);
             server.FlushDatabase();

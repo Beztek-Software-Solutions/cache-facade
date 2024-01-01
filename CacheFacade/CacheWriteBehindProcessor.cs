@@ -45,7 +45,7 @@ namespace Beztek.Facade.Cache
             foreach (string id in uniqueIdSet)
             {
                 // Get from the underlying cache provider rather than the cache itself, since the cache provider is the source of truth for write-behind actions
-                T cachedItem = await this.GetCache().CacheProvider.GetAsync<T>(id).ConfigureAwait(false);
+                T cachedItem = this.GetCache().CacheProvider.Get<T>(id);
 
                 // Also get the item from the DB.
                 T savedItem = (T)await this.GetCache().PersistenceService.GetByIdAsync(id).ConfigureAwait(false);
