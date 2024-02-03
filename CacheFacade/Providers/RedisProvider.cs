@@ -32,7 +32,8 @@ namespace Beztek.Facade.Cache.Providers
             ConnectionConfig = new ConfigurationOptions {
                 Password = redisCacheConfiguration.Password,
                 Ssl = redisCacheConfiguration.UseSSL,
-                AbortOnConnectFail = redisCacheConfiguration.AbortConnection
+                AbortOnConnectFail = redisCacheConfiguration.AbortConnection,
+                AllowAdmin = true
             };
 
             ConnectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
