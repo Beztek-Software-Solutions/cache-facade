@@ -25,8 +25,7 @@ namespace Beztek.Facade.Cache
                     await cache.GetAndPutAsync<T>(key, updatedEntity).ConfigureAwait(false);
 
                     // Return with the value that was saved (with the updated Etag)
-                    return updatedEntity;
-
+                    return await cache.GetAsync<T>(key).ConfigureAwait(false);
                 }
                 catch (ConcurrencyException ce)
                 {
