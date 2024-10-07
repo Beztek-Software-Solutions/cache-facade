@@ -242,7 +242,7 @@ namespace Beztek.Facade.Cache
 
                 string message = $"Error occurred during GetAndReplaceAsync. Key: {key}";
                 this.Logger?.LogError(e, message);
-                throw new IOException(message);
+                throw new IOException(message, e);
             }
         }
 
