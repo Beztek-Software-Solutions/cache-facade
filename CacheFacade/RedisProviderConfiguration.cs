@@ -55,5 +55,12 @@ namespace Beztek.Facade.Cache
         public string CacheName { get; set; }
 
         public long TimeToLiveMillis { get; set; }
+
+        /// <summary>
+        /// A comma-separate list of name=value pairs to configure the underlying Redis client.  Note,
+        /// explicit properties in this class will override any overlapping properties in this string.
+        /// For example the Ssl property, will override any "ssl=true" in this string.
+        /// </summary>
+        public string Options { get; set; }
     }
 }

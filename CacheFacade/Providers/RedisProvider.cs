@@ -29,13 +29,13 @@ namespace Beztek.Facade.Cache.Providers
         /// <param name="redisCacheConfiguration">Redis cache configuration.</param>
         public RedisProvider(RedisProviderConfiguration redisCacheConfiguration)
         {
-            ConnectionConfig = new ConfigurationOptions {
-                Password = redisCacheConfiguration.Password,
-                Ssl = redisCacheConfiguration.UseSSL,
-                AbortOnConnectFail = redisCacheConfiguration.AbortConnection,
-                AllowAdmin = true
-            };
+            ConnectionConfig = string.IsNullOrWhiteSpace(redisCacheConfiguration.Options) ?
+                new ConfigurationOptions() : ConfigurationOptions.Parse(redisCacheConfiguration.Options);
 
+            ConnectionConfig.Password = redisCacheConfiguration.Password;
+            ConnectionConfig.Ssl = redisCacheConfiguration.UseSSL;
+            ConnectionConfig.AbortOnConnectFail = redisCacheConfiguration.AbortConnection;
+            ConnectionConfig.AllowAdmin = true;
             ConnectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
 
             this.cacheDatabase = LazyConnection.Value.GetDatabase(redisCacheConfiguration.NameIndex);
