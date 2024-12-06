@@ -2,9 +2,8 @@
 
 namespace Beztek.Facade.Cache
 {
-    using System.Runtime.Serialization;
 
-    public interface IEtagEntity : ISerializable
+    public interface IEtagEntity
     {
         string Etag { get; set; }
     }

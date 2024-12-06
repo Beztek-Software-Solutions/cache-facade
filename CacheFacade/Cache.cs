@@ -205,6 +205,13 @@ namespace Beztek.Facade.Cache
                     IEtagEntity currObject = value as IEtagEntity;
                     if (currObject != null)
                     {
+                        // Check if the value has actually changed, otherwise do not write unnecessarilly
+                        if (object.Equals(result, value))
+                        {
+                            // Nothing to store, since the value is not changed
+                            return value;
+                        }
+
                         if (!string.Equals(((IEtagEntity)result).Etag, currObject.Etag, StringComparison.Ordinal))
                         {
                             throw new ConcurrencyException("Object was already updated first");
