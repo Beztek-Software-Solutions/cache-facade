@@ -27,10 +27,10 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
-        public async Task UpdateAllStalePath()
+        public void UpdateAllStalePath()
         {
             // the paramter "true" would cause a concurrency exception every time the function used by the helper is called
-            Assert.ThrowsAsync<ConcurrencyException>(async () => await this.ParameterizedTest(true).ConfigureAwait(false));
+            Assert.ThrowsAsync<ConcurrencyException>(async () => await this.ParameterizedTest(true));
         }
 
         // Internal 
@@ -44,8 +44,8 @@ namespace Beztek.Facade.Cache.Tests
             await this.cache.GetAndPutIfAbsentAsync<TestEtagCacheable>(oldResult.Id, oldResult).ConfigureAwait(false);
             object[] parameters = new object[] { throwExceptionFlag };
             TestEtagCacheable updated = await EtagEntityUpdateHelper.UpdateEntityAsync<TestEtagCacheable>(this.cache, oldResult.Id, parameters, this.UpdateEtagCacheable).ConfigureAwait(false);
-            Assert.AreEqual("newresult", updated.Value);
-            Assert.AreNotEqual(oldResult.Etag, updated.Etag);
+            Assert.That("newresult",  Is.EqualTo(updated.Value));
+            Assert.That(oldResult.Etag,  Is.Not.EqualTo(updated.Etag));
             return;
         }
 

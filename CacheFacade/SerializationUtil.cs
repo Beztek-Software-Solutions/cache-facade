@@ -5,6 +5,7 @@ namespace Beztek.Facade.Cache
     using System;
     using System.Text;
     using System.Text.Json;
+    using System.Text.Json.Serialization;
 
     public static class SerializationUtil
     {
@@ -73,7 +74,7 @@ namespace Beztek.Facade.Cache
         private static JsonSerializerOptions GetJsonSerializerOptions()
         {
             JsonSerializerOptions tmpOptions = new JsonSerializerOptions {
-                IgnoreNullValues = true
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
             return tmpOptions;
         }

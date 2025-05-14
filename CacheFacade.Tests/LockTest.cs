@@ -26,7 +26,7 @@ namespace Beztek.Facade.Cache.Tests
         {
             using (IDisposable lock1 = this.testLock.AcquireLock("test0Lock", 50, 300, 1))
             {
-                Assert.IsNotNull(lock1);
+                Assert.That(lock1, Is.Not.Null);
             }
         }
 
@@ -40,7 +40,7 @@ namespace Beztek.Facade.Cache.Tests
                     Thread.Sleep(301);
                     // Lock has expired
                     IDisposable lock2 = this.testLock.AcquireLock("test1Lock", 50, 300, 1);
-                    Assert.IsNotNull(lock2);
+                    Assert.That(lock2, Is.Not.Null);
                 }).Wait();
             }
         }
@@ -50,10 +50,10 @@ namespace Beztek.Facade.Cache.Tests
         {
             using (IDisposable lock1 = this.testLock.AcquireLock("test2Lock", 50, 300, 1))
             {
-                Task.Run(async () => {
+                Task.Run(() => {
                     // Lock should expire by timeeout
                     IDisposable lock2 = this.testLock.AcquireLock("test2Lock", 301, 300, 1);
-                    Assert.IsNotNull(lock2);
+                    Assert.That(lock2, Is.Not.Null);
                 }).Wait();
             }
         }
@@ -66,7 +66,7 @@ namespace Beztek.Facade.Cache.Tests
                     Task.Run(() => {
                         // Try to acquire the lock from a different thread. Should timeout
                         IDisposable lock2 = this.testLock.AcquireLock("test3Lock", 5, 100, 1);
-                        Assert.IsNotNull(lock2);
+                        Assert.That(lock2, Is.Not.Null);
                     }).Wait();
                 });
         }
@@ -76,13 +76,13 @@ namespace Beztek.Facade.Cache.Tests
         {
             using (IDisposable lock1 = this.testLock.AcquireLock("test4Lock", 50, 300, 1))
             {
-                Assert.IsNotNull(lock1);
+                Assert.That(lock1, Is.Not.Null);
             }
 
             // Second time we should be able to get it again, because the other was disposed
             using (IDisposable lock1 = this.testLock.AcquireLock("test4Lock", 50, 300, 1))
             {
-                Assert.IsNotNull(lock1);
+                Assert.That(lock1, Is.Not.Null);
             }
         }
 
@@ -91,13 +91,13 @@ namespace Beztek.Facade.Cache.Tests
         {
             using (IDisposable lock1 = this.testLock.AcquireLock("test5Lock", 50, 300, 1))
             {
-                Assert.IsNotNull(lock1);
+                Assert.That(lock1, Is.Not.Null);
             }
             // Second time we should be able to get it again, because the other was disposed
             Task.Run(() => {
                 using (IDisposable lock1 = this.testLock.AcquireLock("test5Lock", 50, 300, 1))
                 {
-                    Assert.IsNotNull(lock1);
+                    Assert.That(lock1, Is.Not.Null);
                 }
             }).Wait();
         }
@@ -107,7 +107,7 @@ namespace Beztek.Facade.Cache.Tests
         {
             using (IDisposable lock1 = this.testLock.AcquireLock("test6Lock", 50, 300, 1))
             {
-                Assert.IsNotNull(lock1);
+                Assert.That(lock1, Is.Not.Null);
                 IDisposable lock2 = this.testLock.AcquireLock("test6Lock", 50, 300, 1);
             }
         }

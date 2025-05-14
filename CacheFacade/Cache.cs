@@ -409,7 +409,7 @@ namespace Beztek.Facade.Cache
         /// <param name="key">The key to be used in the cache</param>
         /// <param name="value">The object to be stored into or removed from the cache</param>
         /// <returns></returns>
-        private async Task RollbackCacheValue<T>(string key, T value)
+        private Task RollbackCacheValue<T>(string key, T value)
         {
             if (value != null)
             {
@@ -419,6 +419,7 @@ namespace Beztek.Facade.Cache
             {
                 this.CacheProvider.Remove<T>(key);
             }
+            return Task.CompletedTask;
         }
     }
 }

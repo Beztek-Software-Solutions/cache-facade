@@ -4,7 +4,6 @@ namespace Beztek.Facade.Cache.Providers
 {
     using System;
     using System.IO;
-
     using StackExchange.Redis;
 
     /// <summary>
@@ -15,12 +14,16 @@ namespace Beztek.Facade.Cache.Providers
         public const SerializationType SerType = SerializationType.Json;
 
         /// <summary>
+        /// Gets configuration reader for Redis CacheProvider.
+        /// </summary>
+        private static ConfigurationOptions ConnectionConfig { get; set; }
+
+        /// <summary>
         /// Redis CacheProvider connection that will be thread safe lazy initialize.
         /// </summary>
         private static readonly Lazy<ConnectionMultiplexer> LazyConnection = new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(ConnectionConfig));
 
         private readonly IDatabase cacheDatabase;
-        private readonly string Endpoint;
         private TimeSpan TimeToLive;
 
         /// <summary>
@@ -37,9 +40,9 @@ namespace Beztek.Facade.Cache.Providers
             ConnectionConfig.AbortOnConnectFail = redisCacheConfiguration.AbortConnection;
             ConnectionConfig.AllowAdmin = true;
             ConnectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
-
+    
             this.cacheDatabase = LazyConnection.Value.GetDatabase(redisCacheConfiguration.NameIndex);
-            this.Endpoint = redisCacheConfiguration.Endpoint;
+            //this.Endpoint = redisCacheConfiguration.Endpoint;
             this.TimeToLive = TimeSpan.FromMilliseconds(redisCacheConfiguration.TimeToLiveMillis);
         }
 
@@ -52,11 +55,6 @@ namespace Beztek.Facade.Cache.Providers
             this.cacheDatabase = cacheDatabase;
         }
 
-        /// <summary>
-        /// Gets configuration reader for Redis CacheProvider.
-        /// </summary>
-        private static ConfigurationOptions ConnectionConfig { get; set; }
-
         public T Get<T>(string key)
         {
             var result = this.cacheDatabase.StringGet(key);
@@ -65,7 +63,7 @@ namespace Beztek.Facade.Cache.Providers
 
         public void Put<T>(string key, T value)
         {
-            bool result = this.cacheDatabase.StringSet(key, SerializationUtil.ByteToString(SerializationUtil.Serialize(SerType, value)), this.TimeToLive);
+            bool result = this.cacheDatabase.StringSet(key, (string)SerializationUtil.ByteToString(SerializationUtil.Serialize(SerType, value)), this.TimeToLive);
             if (!result)
             {
                 throw new IOException($"Unable to save the value 'in the cache for key: {key}.");
@@ -88,10 +86,13 @@ namespace Beztek.Facade.Cache.Providers
             return currentValue;
         }
 
-        public bool Clear()
-        {
-            IServer server = LazyConnection.Value.GetServer(this.Endpoint);
-            server.FlushDatabase();
+        public bool Clear() {
+            ConnectionMultiplexer redis = LazyConnection.Value;
+            foreach (var endpoint in redis.GetEndPoints())
+            {
+                IServer server = redis.GetServer(endpoint);
+                server.FlushAllDatabases();
+            }
             return true;
         }
     }

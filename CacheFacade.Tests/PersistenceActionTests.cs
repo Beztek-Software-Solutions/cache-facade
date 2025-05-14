@@ -16,23 +16,23 @@ namespace Beztek.Facade.Cache.Tests
             string id = "1";
             WriteType writeType = WriteType.Create;
             PersistenceAction persistence = new PersistenceAction(id, writeType);
-            Assert.IsNotNull(persistence.Id);
-            Assert.IsNotNull(persistence.WriteType);
+            Assert.That(persistence.Id, Is.Not.Null);
+            Assert.That(persistence.WriteType, Is.Not.Null);
 
             // Check Equals method
-            Assert.AreEqual(persistence, new PersistenceAction(id, writeType));
+            Assert.That(persistence,  Is.EqualTo(new PersistenceAction(id, writeType)));
 
             // Check Equals method
-            Assert.AreNotEqual(persistence, new PersistenceAction("2", writeType));
+            Assert.That(persistence,  Is.Not.EqualTo(new PersistenceAction("2", writeType)));
 
             // Check Equals method
-            Assert.AreNotEqual(persistence, new PersistenceAction(id, WriteType.Update));
+            Assert.That(persistence,  Is.Not.EqualTo(new PersistenceAction(id, WriteType.Update)));
 
             // Check Equals method
-            Assert.AreNotEqual(persistence, "3");
+            Assert.That(persistence, Is.Not.EqualTo("3"));
 
             // Check GetHashCode method
-            Assert.AreEqual(persistence.GetHashCode(), new PersistenceAction(id, writeType).GetHashCode());
+            Assert.That(persistence.GetHashCode(),  Is.EqualTo(new PersistenceAction(id, writeType).GetHashCode()));
         }
     }
 }

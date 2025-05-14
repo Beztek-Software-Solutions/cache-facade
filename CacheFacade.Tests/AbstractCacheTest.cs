@@ -25,7 +25,7 @@ namespace Beztek.Facade.Cache.Tests
 
             // Put the old result in the cache and validate
             await cache.GetAndPutAsync(oldResult.Id, oldResult).ConfigureAwait(false);
-            Assert.AreEqual(oldResult, await cache.GetAsync<TestEtagCacheable>(oldResult.Id).ConfigureAwait(false));
+            Assert.That(oldResult,  Is.EqualTo(await cache.GetAsync<TestEtagCacheable>(oldResult.Id).ConfigureAwait(false)));
             if (cache.PersistenceService != null)
             {
                 Task.Run(async () => {
@@ -34,7 +34,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(oldResult, await cache.PersistenceService.GetByIdAsync(oldResult.Id).ConfigureAwait(false));
+                    Assert.That(oldResult,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(oldResult.Id).ConfigureAwait(false)));
                 }).Wait();
             }
 
@@ -44,12 +44,12 @@ namespace Beztek.Facade.Cache.Tests
             if (cache.PersistenceService == null)
             {
                 // Object should not exist in the cache any more since it is a non-persistence cache
-                Assert.IsNull(await cache.GetAsync<TestEtagCacheable>(oldResult.Id).ConfigureAwait(false));
+                Assert.That(await cache.GetAsync<TestEtagCacheable>(oldResult.Id).ConfigureAwait(false), Is.Null);
             }
             else
             {
                 // We should get the version that is in the database
-                Assert.AreEqual(oldResult, await cache.GetAsync<TestEtagCacheable>(oldResult.Id).ConfigureAwait(false));
+                Assert.That(oldResult,  Is.EqualTo(await cache.GetAsync<TestEtagCacheable>(oldResult.Id).ConfigureAwait(false)));
             }
         }
 
@@ -61,7 +61,7 @@ namespace Beztek.Facade.Cache.Tests
             TestEtagCacheable result = new TestEtagCacheable(Guid.NewGuid().ToString(), "get-result", GetNow(), GetNow(), Guid.NewGuid().ToString());
             await cache.GetAndPutIfAbsentAsync(result.Id, result).ConfigureAwait(false);
             TestEtagCacheable operationResult = await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false);
-            Assert.AreEqual(result, operationResult);
+            Assert.That(result,  Is.EqualTo(operationResult));
 
             if (cache.PersistenceService != null)
             {
@@ -71,7 +71,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(result, await cache.PersistenceService.GetByIdAsync(result.Id).ConfigureAwait(false));
+                    Assert.That(result,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(result.Id).ConfigureAwait(false)));
                 }).Wait();
             }
         }
@@ -83,7 +83,7 @@ namespace Beztek.Facade.Cache.Tests
             Cache cache = TestUtil.GetCache(this.CacheType, cts.Token);
             string key = Guid.NewGuid().ToString();
             TestEtagCacheable operationResult = await cache.GetAsync<TestEtagCacheable>(key).ConfigureAwait(false);
-            Assert.IsNull(operationResult);
+            Assert.That(operationResult, Is.Null);
 
             if (cache.PersistenceService != null)
             {
@@ -93,7 +93,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.IsNull(await cache.PersistenceService.GetByIdAsync(key).ConfigureAwait(false));
+                    Assert.That(await cache.PersistenceService.GetByIdAsync(key).ConfigureAwait(false), Is.Null);
                 }).Wait();
             }
         }
@@ -105,9 +105,9 @@ namespace Beztek.Facade.Cache.Tests
             Cache cache = TestUtil.GetCache(this.CacheType, cts.Token);
             TestEtagCacheable result = new TestEtagCacheable(Guid.NewGuid().ToString(), "getandputifabsentasync-result", GetNow(), GetNow(), Guid.NewGuid().ToString());
             TestEtagCacheable operationResult = await cache.GetAndPutIfAbsentAsync<TestEtagCacheable>(result.Id, result).ConfigureAwait(false);
-            Assert.IsNull(operationResult);
+            Assert.That(operationResult, Is.Null);
 
-            Assert.AreEqual(result, await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false));
+            Assert.That(result,  Is.EqualTo(await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false)));
             if (cache.PersistenceService != null)
             {
                 Task.Run(async () => {
@@ -116,7 +116,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(result, await cache.PersistenceService.GetByIdAsync(result.Id).ConfigureAwait(false));
+                    Assert.That(result,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(result.Id).ConfigureAwait(false)));
                 }).Wait();
             }
         }
@@ -130,9 +130,9 @@ namespace Beztek.Facade.Cache.Tests
             TestEtagCacheable newResult = new TestEtagCacheable(oldResult.Id, "new-result", GetNow(), GetNow(), oldResult.Etag);
             _ = cache.GetAndPutAsync(oldResult.Id, oldResult).Result;
             TestEtagCacheable operationResult = await cache.GetAndPutIfAbsentAsync<TestEtagCacheable>(newResult.Id, newResult).ConfigureAwait(false);
-            Assert.AreEqual(oldResult, operationResult);
+            Assert.That(oldResult,  Is.EqualTo(operationResult));
 
-            Assert.AreEqual(oldResult, await cache.GetAsync<TestEtagCacheable>(newResult.Id).ConfigureAwait(false));
+            Assert.That(oldResult,  Is.EqualTo(await cache.GetAsync<TestEtagCacheable>(newResult.Id).ConfigureAwait(false)));
             if (cache.PersistenceService != null)
             {
                 Task.Run(async () => {
@@ -141,7 +141,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(oldResult, await cache.PersistenceService.GetByIdAsync(newResult.Id).ConfigureAwait(false));
+                    Assert.That(oldResult,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(newResult.Id).ConfigureAwait(false)));
                 }).Wait();
             }
         }
@@ -153,9 +153,9 @@ namespace Beztek.Facade.Cache.Tests
             Cache cache = TestUtil.GetCache(this.CacheType, cts.Token);
             TestEtagCacheable result = new TestEtagCacheable(Guid.NewGuid().ToString(), "result", GetNow(), GetNow(), Guid.NewGuid().ToString());
             TestEtagCacheable operationResult = await cache.GetAndReplaceAsync<TestEtagCacheable>(result.Id, result).ConfigureAwait(false);
-            Assert.IsNull(operationResult);
+            Assert.That(operationResult, Is.Null);
 
-            Assert.IsNull(await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false));
+            Assert.That(await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false), Is.Null);
             if (cache.PersistenceService != null)
             {
                 Task.Run(async () => {
@@ -164,7 +164,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.IsNull(await cache.PersistenceService.GetByIdAsync(result.Id).ConfigureAwait(false));
+                    Assert.That(await cache.PersistenceService.GetByIdAsync(result.Id).ConfigureAwait(false), Is.Null);
                 }).Wait();
             }
         }
@@ -185,13 +185,13 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(oldResult, await cache.PersistenceService.GetByIdAsync(oldResult.Id).ConfigureAwait(false));
+                    Assert.That(oldResult,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(oldResult.Id).ConfigureAwait(false)));
                 }).Wait();
             }
 
             TestEtagCacheable operationResult = await cache.GetAndReplaceAsync<TestEtagCacheable>(oldResult.Id, newResult).ConfigureAwait(false);
-            Assert.AreEqual(oldResult, operationResult);
-            Assert.AreEqual(newResult, cache.CacheProvider.Get<TestEtagCacheable>(oldResult.Id));
+            Assert.That(oldResult,  Is.EqualTo(operationResult));
+            Assert.That(newResult,  Is.EqualTo(cache.CacheProvider.Get<TestEtagCacheable>(oldResult.Id)));
 
             if (cache.PersistenceService != null)
             {
@@ -201,7 +201,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(newResult, await cache.PersistenceService.GetByIdAsync(oldResult.Id).ConfigureAwait(false));
+                    Assert.That(newResult,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(oldResult.Id).ConfigureAwait(false)));
                 }).ConfigureAwait(false);
             }
         }
@@ -215,9 +215,9 @@ namespace Beztek.Facade.Cache.Tests
             TestEtagCacheable newResult = new TestEtagCacheable(oldResult.Id, "new-result", GetNow(), GetNow(), oldResult.Etag);
             await cache.GetAndPutAsync(oldResult.Id, oldResult).ConfigureAwait(false);
             TestEtagCacheable operationResult = await cache.GetAndPutAsync<TestEtagCacheable>(newResult.Id, newResult).ConfigureAwait(false);
-            Assert.AreEqual(oldResult, operationResult);
+            Assert.That(oldResult,  Is.EqualTo(operationResult));
 
-            Assert.AreEqual(newResult, cache.CacheProvider.Get<TestEtagCacheable>(newResult.Id));
+            Assert.That(newResult,  Is.EqualTo(cache.CacheProvider.Get<TestEtagCacheable>(newResult.Id)));
             if (cache.PersistenceService != null)
             {
                 await Task.Run(async () => {
@@ -226,7 +226,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(newResult, await cache.PersistenceService.GetByIdAsync(newResult.Id).ConfigureAwait(false));
+                    Assert.That(newResult,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(newResult.Id).ConfigureAwait(false)));
                 }).ConfigureAwait(false);
             }
         }
@@ -238,10 +238,10 @@ namespace Beztek.Facade.Cache.Tests
             Cache cache = TestUtil.GetCache(this.CacheType, cts.Token);
             TestEtagCacheable result = new TestEtagCacheable(Guid.NewGuid().ToString(), "getandputasync-result", GetNow(), GetNow(), Guid.NewGuid().ToString());
             await cache.GetAndPutAsync(result.Id, result).ConfigureAwait(false);
-            Assert.AreEqual(result, await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false));
+            Assert.That(result,  Is.EqualTo(await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false)));
 
             TestEtagCacheable operationResult = await cache.RemoveAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false);
-            Assert.AreEqual(result, operationResult);
+            Assert.That(result,  Is.EqualTo(operationResult));
 
             Task.Run(async () => {
                 if (cache.PersistenceService != null)
@@ -251,11 +251,11 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.IsNull(await cache.PersistenceService.GetByIdAsync(result.Id).ConfigureAwait(false));
+                    Assert.That(await cache.PersistenceService.GetByIdAsync(result.Id).ConfigureAwait(false), Is.Null);
                 }
 
                 // Needs to be called at the end, to make sure it is cleared from the DB
-                Assert.IsNull(await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false));
+                Assert.That(await cache.GetAsync<TestEtagCacheable>(result.Id).ConfigureAwait(false), Is.Null);
             }).Wait();
         }
 
@@ -266,9 +266,9 @@ namespace Beztek.Facade.Cache.Tests
             Cache cache = TestUtil.GetCache(this.CacheType, cts.Token);
             string key = Guid.NewGuid().ToString();
             TestEtagCacheable operationResult = await cache.RemoveAsync<TestEtagCacheable>(key).ConfigureAwait(false);
-            Assert.IsNull(operationResult);
+            Assert.That(operationResult, Is.Null);
 
-            Assert.IsNull(await cache.GetAsync<TestEtagCacheable>(key).ConfigureAwait(false));
+            Assert.That(await cache.GetAsync<TestEtagCacheable>(key).ConfigureAwait(false), Is.Null);
             if (cache.PersistenceService != null)
             {
                 if (cache.CacheType == CacheType.WriteBehind)
@@ -276,7 +276,7 @@ namespace Beztek.Facade.Cache.Tests
                     await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                 }
 
-                Assert.IsNull(await cache.PersistenceService.GetByIdAsync(key).ConfigureAwait(false));
+                Assert.That(await cache.PersistenceService.GetByIdAsync(key).ConfigureAwait(false), Is.Null);
             }
         }
 
@@ -332,8 +332,8 @@ namespace Beztek.Facade.Cache.Tests
                 }
             ).ConfigureAwait(false);
 
-            Assert.AreEqual(v5, cache.CacheProvider.Get<TestEtagCacheable>(v1.Id));
-            Assert.AreEqual("v5", v5.Value);
+            Assert.That(v5,  Is.EqualTo(cache.CacheProvider.Get<TestEtagCacheable>(v1.Id)));
+            Assert.That("v5",  Is.EqualTo(v5.Value));
 
             // Should match what is in the DB
             await Task.Run(async () => {
@@ -344,7 +344,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(v5, await cache.PersistenceService.GetByIdAsync(v1.Id).ConfigureAwait(false));
+                    Assert.That(v5,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(v1.Id).ConfigureAwait(false)));
                 }
             }).ConfigureAwait(false);
         }
@@ -403,7 +403,7 @@ namespace Beztek.Facade.Cache.Tests
             await cache.RemoveAsync<TestEtagCacheable>(v2.Id).ConfigureAwait(false);
             await cache.GetAndPutIfAbsentAsync<TestEtagCacheable>(v2.Id, v2).ConfigureAwait(false);
 
-            Assert.AreEqual(v2, cache.CacheProvider.Get<TestEtagCacheable>(v1.Id));
+            Assert.That(v2,  Is.EqualTo(cache.CacheProvider.Get<TestEtagCacheable>(v1.Id)));
 
             // Should match what is in the DB
             await Task.Run(async () => {
@@ -414,7 +414,7 @@ namespace Beztek.Facade.Cache.Tests
                         await Task.Delay(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis)).ConfigureAwait(false);
                     }
 
-                    Assert.AreEqual(v2, await cache.PersistenceService.GetByIdAsync(v1.Id).ConfigureAwait(false));
+                    Assert.That(v2,  Is.EqualTo(await cache.PersistenceService.GetByIdAsync(v1.Id).ConfigureAwait(false)));
                 }
             }).ConfigureAwait(false);
         }
@@ -483,11 +483,11 @@ namespace Beztek.Facade.Cache.Tests
                         Thread.Sleep(TimeSpan.FromMilliseconds(WaitTimeForWriteBehindMillis));
                     }
 
-                    Assert.IsNull(cache.PersistenceService.GetByIdAsync(v1.Id).Result);
+                    Assert.That(cache.PersistenceService.GetByIdAsync(v1.Id).Result, Is.Null);
                 }
 
                 // Need to read this after ensuring that it is cleard from the DB
-                Assert.IsNull(cache.GetAsync<TestEtagCacheable>(v1.Id).Result);
+                Assert.That(cache.GetAsync<TestEtagCacheable>(v1.Id).Result, Is.Null);
             }).ConfigureAwait(false);
         }
 

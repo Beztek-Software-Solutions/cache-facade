@@ -27,7 +27,7 @@ namespace Beztek.Facade.Cache.Tests
             long[] happyPathArray = new long[]{DateTime.Now.Millisecond};
             string intermediate = SerializationUtil.JsonSerialize(happyPathArray);
             long[] result = SerializationUtil.JsonDeserialize<long[]>(intermediate);
-            Assert.AreEqual(result, happyPathArray);
+            Assert.That(result,  Is.EqualTo(happyPathArray));
         }
 
         [Test]
@@ -36,7 +36,7 @@ namespace Beztek.Facade.Cache.Tests
             long[] nullArray = default(long[]);
             string intermediate = SerializationUtil.JsonSerialize(nullArray);
             long[] result = SerializationUtil.JsonDeserialize<long[]>(intermediate);
-            Assert.AreEqual(result, nullArray);
+            Assert.That(result,  Is.EqualTo(nullArray));
         }
 
         [Test]
@@ -45,7 +45,7 @@ namespace Beztek.Facade.Cache.Tests
             string serializedString = SerializationUtil.JsonSerialize(new TestCacheable("test-key", "get-result"));
             byte[] bytifiedString = SerializationUtil.StringToByte(serializedString);
             string stringifiedByte = SerializationUtil.ByteToString(bytifiedString);
-            Assert.AreEqual(serializedString, stringifiedByte);
+            Assert.That(serializedString,  Is.EqualTo(stringifiedByte));
         }
 
         // Utility method

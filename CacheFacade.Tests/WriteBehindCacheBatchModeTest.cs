@@ -8,7 +8,7 @@ namespace Beztek.Facade.Cache.Tests
     public class WriteBehindCacheBatchModeTest : WriteBehindCacheIndividualModeTest
     {
         [SetUp]
-        public void SetUp()
+        public new void SetUp()
         {
             this.CacheType = CacheType.WriteBehind;
         }

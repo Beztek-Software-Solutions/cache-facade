@@ -17,7 +17,7 @@ namespace Beztek.Facade.Cache.Tests
             CacheType cacheType = CacheType.NonPersistent;
             ICacheProviderConfiguration cacheProviderConfiguration = new LocalMemoryProviderConfiguration(cacheName, 300000);
             ICache cache = CacheFactory.GetOrCreateCache(new CacheConfiguration(cacheProviderConfiguration, cacheType));
-            Assert.IsNotNull(cache);
+            Assert.That(cache, Is.Not.Null);
         }
 
         [Test]
@@ -58,11 +58,11 @@ namespace Beztek.Facade.Cache.Tests
             string cacheName = "CacheFactoryGetCache";
             CacheType cacheType = CacheType.NonPersistent;
             ICacheProviderConfiguration cacheProviderConfiguration = new LocalMemoryProviderConfiguration(cacheName, 300000);
-            Assert.IsNull(CacheFactory.GetCache(cacheName));
+            Assert.That(CacheFactory.GetCache(cacheName), Is.Null);
 
             ICache cache = CacheFactory.GetOrCreateCache(new CacheConfiguration(cacheProviderConfiguration, cacheType));
-            Assert.IsNotNull(cache);
-            Assert.IsNotNull(CacheFactory.GetCache(cacheName));
+            Assert.That(cache, Is.Not.Null);
+            Assert.That(CacheFactory.GetCache(cacheName), Is.Not.Null);
         }
     }
 }

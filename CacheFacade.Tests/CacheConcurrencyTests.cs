@@ -29,10 +29,10 @@ namespace Beztek.Facade.Cache.Tests
             TestEtagCacheable oldResult = await this.cache.GetAsync<TestEtagCacheable>(origResult.Id).ConfigureAwait(false);
             TestEtagCacheable toSaveResult = new TestEtagCacheable(oldResult.Id, "new-result", createdDate, updatedDate, oldResult.Etag);
             TestEtagCacheable operationResult = await this.cache.GetAndReplaceAsync<TestEtagCacheable>(toSaveResult.Id, toSaveResult).ConfigureAwait(false);
-            Assert.AreEqual(oldResult, operationResult);
+            Assert.That(oldResult,  Is.EqualTo(operationResult));
             TestEtagCacheable newResult = await this.cache.GetAsync<TestEtagCacheable>(toSaveResult.Id).ConfigureAwait(false);
-            Assert.AreEqual(toSaveResult.Value, newResult.Value);
-            Assert.AreNotEqual(oldResult.Etag, newResult.Etag);
+            Assert.That(toSaveResult.Value,  Is.EqualTo(newResult.Value));
+            Assert.That(oldResult.Etag,  Is.Not.EqualTo(newResult.Etag));
         }
 
         [Test]
@@ -56,10 +56,10 @@ namespace Beztek.Facade.Cache.Tests
             TestEtagCacheable oldResult = await this.cache.GetAsync<TestEtagCacheable>(origResult.Id).ConfigureAwait(false);
             TestEtagCacheable toSaveResult = new TestEtagCacheable(oldResult.Id, "new-result", createdDate, updatedDate, oldResult.Etag);
             TestEtagCacheable operationResult = await this.cache.GetAndPutAsync<TestEtagCacheable>(toSaveResult.Id, toSaveResult).ConfigureAwait(false);
-            Assert.AreEqual(oldResult, operationResult);
+            Assert.That(oldResult,  Is.EqualTo(operationResult));
             TestEtagCacheable newResult = await this.cache.GetAsync<TestEtagCacheable>(toSaveResult.Id).ConfigureAwait(false);
-            Assert.AreEqual(toSaveResult.Value, newResult.Value);
-            Assert.AreNotEqual(oldResult.Etag, newResult.Etag);
+            Assert.That(toSaveResult.Value,  Is.EqualTo(newResult.Value));
+            Assert.That(oldResult.Etag,  Is.Not.EqualTo(newResult.Etag));
         }
 
         [Test]
