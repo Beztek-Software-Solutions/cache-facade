@@ -4,6 +4,7 @@ namespace Beztek.Facade.Cache
 {
     using System;
     using System.Collections.Concurrent;
+    using System.Threading;
     using Microsoft.Extensions.Logging;
 
     public static class CacheFactory
@@ -12,6 +13,12 @@ namespace Beztek.Facade.Cache
 
         public static ICache GetOrCreateCache(CacheConfiguration cacheConfiguration, ILogger logger = null)
         {
+            // Sets the minimum number of threads the .NET ThreadPool keeps "warm" before it starts introducing delays.
+            // If the app sees high load bursts, a low MinThreads value can cause latency spikes, including timeouts.
+            // Default values are often very low (sometimes 1 on Linux containers or Azure App Service),
+            // which is too little for I/O-heavy workloads.
+            ThreadPool.SetMinThreads(workerThreads: 256, completionPortThreads: 256);
+
             string cacheName = cacheConfiguration.CacheProviderConfiguration.CacheName;
             ICache result;
             if (!CacheDictionary.TryGetValue(cacheName, out result))

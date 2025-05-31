@@ -14,7 +14,7 @@ namespace Beztek.Facade.Cache.Providers
         public const SerializationType SerType = SerializationType.Json;
 
         /// <summary>
-        /// Gets configuration reader for Redis CacheProvider.
+        /// Configuration for Redis CacheProvider.
         /// </summary>
         private static ConfigurationOptions ConnectionConfig { get; set; }
 
