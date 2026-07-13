@@ -147,6 +147,42 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        public Task<T> PeekAsync<T>(string key)
+        {
+            try
+            {
+                this.Logger?.LogDebug($"Peeking item from cache provider only. Key: {key}");
+                return Task.FromResult(this.CacheProvider.Get<T>(key));
+            }
+            catch (Exception e)
+            {
+                string message = $"Error occurred when peeking item from cache. Key: {key}";
+                this.Logger?.LogError(e, message);
+                throw new IOException(message, e);
+            }
+        }
+
+        public Task WarmAsync<T>(string key, T value)
+        {
+            if (value == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            try
+            {
+                this.Logger?.LogDebug($"Warming cache provider (no persistence). Key: {key}");
+                this.CacheProvider.Put(key, value);
+                return Task.CompletedTask;
+            }
+            catch (Exception e)
+            {
+                string message = $"Error occurred when warming cache. Key: {key}";
+                this.Logger?.LogError(e, message);
+                throw new IOException(message, e);
+            }
+        }
+
         public async Task<T> GetAndPutIfAbsentAsync<T>(string key, T value)
         {
             using IDisposable currLock = this.AcquireLock($"_gpa-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));

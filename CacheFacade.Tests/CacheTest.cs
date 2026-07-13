@@ -40,6 +40,39 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
+        public async Task PeekAsync_ReturnsProviderValueWithoutPersistence()
+        {
+            TestCacheable result = new TestCacheable("test-key", "peek-result");
+            this.CacheProvider.Setup(m => m.Get<TestCacheable>("test-key")).Returns(result);
+            TestCacheable operationResult = await this.Cache.PeekAsync<TestCacheable>("test-key").ConfigureAwait(false);
+            Assert.That(operationResult, Is.EqualTo(result));
+            this.CacheProvider.Verify(m => m.Put(It.IsAny<string>(), It.IsAny<TestCacheable>()), Times.Never);
+        }
+
+        [Test]
+        public async Task PeekAsync_ReturnsNullWhenAbsent()
+        {
+            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns((TestCacheable)null);
+            TestCacheable operationResult = await this.Cache.PeekAsync<TestCacheable>("missing").ConfigureAwait(false);
+            Assert.That(operationResult, Is.Null);
+        }
+
+        [Test]
+        public async Task WarmAsync_PutsProviderOnly()
+        {
+            TestCacheable value = new TestCacheable("test-key", "warm-result");
+            await this.Cache.WarmAsync("test-key", value).ConfigureAwait(false);
+            this.CacheProvider.Verify(m => m.Put("test-key", value), Times.Once);
+        }
+
+        [Test]
+        public async Task WarmAsync_NullValue_DoesNotPut()
+        {
+            await this.Cache.WarmAsync<TestCacheable>("test-key", null).ConfigureAwait(false);
+            this.CacheProvider.Verify(m => m.Put(It.IsAny<string>(), It.IsAny<TestCacheable>()), Times.Never);
+        }
+
+        [Test]
         public void GetAsyncExceptionTest()
         {
             this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Throws(new Exception("dummy-exception"));

@@ -15,10 +15,27 @@ namespace Beztek.Facade.Cache
 
         /// <summary>
         /// Returns the value for the key, and null if it is not in the cache.
+        /// For write-through / write-behind caches, a miss loads from persistence and fills the provider.
         /// </summary>
         /// <param name="key">CacheProvider item key.</param>
         /// <returns>CacheProvider item value corresponding to the key; null if it is not in the cache.</returns>
         Task<T> GetAsync<T>(string key);
+
+        /// <summary>
+        /// Returns the value only if it is already in the cache provider. Does not load from persistence and does not write.
+        /// Use for paged list hydration: peek hits, batch-load misses from SQL, then <see cref="WarmAsync{T}"/>.
+        /// </summary>
+        /// <param name="key">CacheProvider item key.</param>
+        /// <returns>Cached value, or null if absent from the provider.</returns>
+        Task<T> PeekAsync<T>(string key);
+
+        /// <summary>
+        /// Puts a value into the cache provider only (no persistence Create/Update).
+        /// Same fill used after a read-through miss in <see cref="GetAsync{T}"/>; not a DB write.
+        /// </summary>
+        /// <param name="key">CacheProvider item key.</param>
+        /// <param name="value">Value already loaded from persistence (e.g. batch GetByIds).</param>
+        Task WarmAsync<T>(string key, T value);
 
         /// <summary>
         /// If the cache does not have the key, put the value for the key and return null, otherwise just return the old value and do not overwrite.
