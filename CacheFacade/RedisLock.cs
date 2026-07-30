@@ -16,7 +16,7 @@ namespace Beztek.Facade.Cache
         {
             this.redlockFactory = redlockFactory;
         }
-    
+
         public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
         {
             return redlockFactory.CreateLock(lockName, TimeSpan.FromMilliseconds(timeoutMillis), TimeSpan.FromMilliseconds(lockTimeMillis), TimeSpan.FromMilliseconds(retryIntervalMillis));

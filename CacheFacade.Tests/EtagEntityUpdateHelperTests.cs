@@ -44,8 +44,8 @@ namespace Beztek.Facade.Cache.Tests
             await this.cache.GetAndPutIfAbsentAsync<TestEtagCacheable>(oldResult.Id, oldResult).ConfigureAwait(false);
             object[] parameters = new object[] { throwExceptionFlag };
             TestEtagCacheable updated = await EtagEntityUpdateHelper.UpdateEntityAsync<TestEtagCacheable>(this.cache, oldResult.Id, parameters, this.UpdateEtagCacheable).ConfigureAwait(false);
-            Assert.That("newresult",  Is.EqualTo(updated.Value));
-            Assert.That(oldResult.Etag,  Is.Not.EqualTo(updated.Etag));
+            Assert.That("newresult", Is.EqualTo(updated.Value));
+            Assert.That(oldResult.Etag, Is.Not.EqualTo(updated.Etag));
             return;
         }
 

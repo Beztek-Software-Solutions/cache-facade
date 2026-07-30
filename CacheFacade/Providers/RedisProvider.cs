@@ -40,7 +40,7 @@ namespace Beztek.Facade.Cache.Providers
             ConnectionConfig.AbortOnConnectFail = redisCacheConfiguration.AbortConnection;
             ConnectionConfig.AllowAdmin = true;
             ConnectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
-    
+
             this.cacheDatabase = LazyConnection.Value.GetDatabase(redisCacheConfiguration.NameIndex);
             //this.Endpoint = redisCacheConfiguration.Endpoint;
             this.TimeToLive = TimeSpan.FromMilliseconds(redisCacheConfiguration.TimeToLiveMillis);
@@ -86,7 +86,8 @@ namespace Beztek.Facade.Cache.Providers
             return currentValue;
         }
 
-        public bool Clear() {
+        public bool Clear()
+        {
             ConnectionMultiplexer redis = LazyConnection.Value;
             foreach (var endpoint in redis.GetEndPoints())
             {

@@ -38,7 +38,7 @@ namespace Beztek.Facade.Cache.Tests
         {
             TestCacheable result = new TestCacheable("PutAsyncTest-key", "putasync-result");
             this.localMemoryCacheProvider.Put<TestCacheable>(result.Id, result);
-            Assert.That(result,  Is.EqualTo(this.localMemoryCacheProvider.Get<TestCacheable>(result.Id)));
+            Assert.That(result, Is.EqualTo(this.localMemoryCacheProvider.Get<TestCacheable>(result.Id)));
         }
 
         [Test]
@@ -47,7 +47,7 @@ namespace Beztek.Facade.Cache.Tests
             TestCacheable result = new TestCacheable("RemoveAsyncKeyExistsTest-key", "getandputasync-result");
             this.localMemoryCacheProvider.Put(result.Id, result);
             TestCacheable operationResult = this.localMemoryCacheProvider.Remove<TestCacheable>("RemoveAsyncKeyExistsTest-key");
-            Assert.That(result,  Is.EqualTo(operationResult));
+            Assert.That(result, Is.EqualTo(operationResult));
             Assert.That(this.localMemoryCacheProvider.Get<TestCacheable>(result.Id), Is.Null);
         }
 
@@ -64,7 +64,7 @@ namespace Beztek.Facade.Cache.Tests
         {
             TestCacheable result = new TestCacheable("ClearAsyncTest-key", "ClearAsyncTest-result");
             this.localMemoryCacheProvider.Put(result.Id, result);
-            Assert.That(result,  Is.EqualTo(this.localMemoryCacheProvider.Get<TestCacheable>("ClearAsyncTest-key")));
+            Assert.That(result, Is.EqualTo(this.localMemoryCacheProvider.Get<TestCacheable>("ClearAsyncTest-key")));
             this.localMemoryCacheProvider.Clear();
             Assert.That(this.localMemoryCacheProvider.Get<TestCacheable>("ClearAsyncTest-key"), Is.Null);
         }

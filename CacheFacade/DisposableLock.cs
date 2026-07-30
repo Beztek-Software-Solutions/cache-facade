@@ -15,7 +15,7 @@ namespace Beztek.Facade.Cache
             this.lockCache = lockCache;
             this.name = name;
         }
-    
+
         public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
         {
             long numAttempts = ((timeoutMillis - 1) / retryIntervalMillis) + 1;

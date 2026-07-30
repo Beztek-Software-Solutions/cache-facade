@@ -20,19 +20,19 @@ namespace Beztek.Facade.Cache.Tests
             Assert.That(persistence.WriteType, Is.Not.Null);
 
             // Check Equals method
-            Assert.That(persistence,  Is.EqualTo(new PersistenceAction(id, writeType)));
+            Assert.That(persistence, Is.EqualTo(new PersistenceAction(id, writeType)));
 
             // Check Equals method
-            Assert.That(persistence,  Is.Not.EqualTo(new PersistenceAction("2", writeType)));
+            Assert.That(persistence, Is.Not.EqualTo(new PersistenceAction("2", writeType)));
 
             // Check Equals method
-            Assert.That(persistence,  Is.Not.EqualTo(new PersistenceAction(id, WriteType.Update)));
+            Assert.That(persistence, Is.Not.EqualTo(new PersistenceAction(id, WriteType.Update)));
 
             // Check Equals method
             Assert.That(persistence, Is.Not.EqualTo("3"));
 
             // Check GetHashCode method
-            Assert.That(persistence.GetHashCode(),  Is.EqualTo(new PersistenceAction(id, writeType).GetHashCode()));
+            Assert.That(persistence.GetHashCode(), Is.EqualTo(new PersistenceAction(id, writeType).GetHashCode()));
         }
     }
 }

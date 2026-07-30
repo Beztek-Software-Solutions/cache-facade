@@ -36,7 +36,7 @@ namespace Beztek.Facade.Cache.Tests
             TestCacheable result = new TestCacheable("test-key", "get-result");
             this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(result);
             TestCacheable operationResult = await this.Cache.GetAsync<TestCacheable>("test-key").ConfigureAwait(false);
-            Assert.That(result,  Is.EqualTo(operationResult));
+            Assert.That(result, Is.EqualTo(operationResult));
         }
 
         [Test]
@@ -85,7 +85,7 @@ namespace Beztek.Facade.Cache.Tests
             TestCacheable result = new TestCacheable("test-key", "getandputifabsentasync-result");
             this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(result);
             TestCacheable operationResult = await this.Cache.GetAndPutIfAbsentAsync<TestCacheable>(result.Id, result).ConfigureAwait(false);
-            Assert.That(result,  Is.EqualTo(operationResult));
+            Assert.That(result, Is.EqualTo(operationResult));
         }
 
         [Test]
@@ -111,7 +111,7 @@ namespace Beztek.Facade.Cache.Tests
             this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(result);
             this.CacheProvider.Setup(m => m.Remove<TestCacheable>(It.IsAny<string>())).Returns(result);
             TestCacheable operationResult = await this.Cache.RemoveAsync<TestCacheable>("test-key").ConfigureAwait(false);
-            Assert.That(result,  Is.EqualTo(operationResult));
+            Assert.That(result, Is.EqualTo(operationResult));
         }
 
         [Test]

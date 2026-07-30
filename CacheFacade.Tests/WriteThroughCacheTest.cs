@@ -45,28 +45,28 @@ namespace Beztek.Facade.Cache.Tests
             // First Page
             int pageNum = 1;
             PagedResults<TestEtagCacheable> pagedResults = await cache.SearchByQueryAsync<TestEtagCacheable>(query, pageNum, pageSize, true).ConfigureAwait(false);
-            Assert.That(pageSize,  Is.EqualTo(pagedResults.PagedList.Count));
-            Assert.That(pageNum,  Is.EqualTo(pagedResults.PageNum));
-            Assert.That(numItems,  Is.EqualTo(((PagedResultsWithTotal<TestEtagCacheable>)pagedResults).TotalResults));
-            Assert.That(1 + (numItems / pageSize),  Is.EqualTo(((PagedResultsWithTotal<TestEtagCacheable>)pagedResults).TotalPages));
+            Assert.That(pageSize, Is.EqualTo(pagedResults.PagedList.Count));
+            Assert.That(pageNum, Is.EqualTo(pagedResults.PageNum));
+            Assert.That(numItems, Is.EqualTo(((PagedResultsWithTotal<TestEtagCacheable>)pagedResults).TotalResults));
+            Assert.That(1 + (numItems / pageSize), Is.EqualTo(((PagedResultsWithTotal<TestEtagCacheable>)pagedResults).TotalPages));
 
             // Random in-between page
             pageNum = 1 + (numItems / (2 * pageSize));
             pagedResults = await cache.SearchByQueryAsync<TestEtagCacheable>(query, pageNum, pageSize, true).ConfigureAwait(false);
-            Assert.That(pageSize,  Is.EqualTo(pagedResults.PagedList.Count));
-            Assert.That(pageNum,  Is.EqualTo(pagedResults.PageNum));
+            Assert.That(pageSize, Is.EqualTo(pagedResults.PagedList.Count));
+            Assert.That(pageNum, Is.EqualTo(pagedResults.PageNum));
 
             // Last page
             pageNum = 1 + (numItems / pageSize);
             pagedResults = await cache.SearchByQueryAsync<TestEtagCacheable>(query, pageNum, pageSize, true).ConfigureAwait(false);
-            Assert.That(numItems - (pageSize * (pageNum - 1)),  Is.EqualTo(pagedResults.PagedList.Count));
-            Assert.That(pageNum,  Is.EqualTo(pagedResults.PageNum));
+            Assert.That(numItems - (pageSize * (pageNum - 1)), Is.EqualTo(pagedResults.PagedList.Count));
+            Assert.That(pageNum, Is.EqualTo(pagedResults.PageNum));
 
             // Wrong page
             pageNum = 2 + (numItems / pageSize);
             pagedResults = await cache.SearchByQueryAsync<TestEtagCacheable>(query, pageNum, pageSize, true).ConfigureAwait(false);
-            Assert.That(0,  Is.EqualTo(pagedResults.PagedList.Count));
-            Assert.That(pageNum,  Is.EqualTo(pagedResults.PageNum));
+            Assert.That(0, Is.EqualTo(pagedResults.PagedList.Count));
+            Assert.That(pageNum, Is.EqualTo(pagedResults.PageNum));
         }
     }
 }

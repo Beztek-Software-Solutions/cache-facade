@@ -3,6 +3,7 @@
 namespace Beztek.Facade.Cache
 {
     using System.Collections.Generic;
+    using System.Linq;
     using System.Threading.Tasks;
     using Beztek.Facade.Queue;
 
@@ -26,13 +27,15 @@ namespace Beztek.Facade.Cache
         // i.e., the latest state of the cache and the content of the DB determines whether we insert, update or delete
         public virtual async Task<List<bool>> Process(List<Message> messageList)
         {
-            // This holds a set of only one entry per id, for each list of messages
+            // This holds a set of only one entry per id, for each list of messages.
+            // These collections are not thread-safe, so the loops below must stay sequential:
+            // concurrent mutation corrupts them into yielding duplicate or null ids.
             HashSet<string> uniqueIdSet = new HashSet<string>();
 
-            Parallel.ForEach(messageList, message => {
-                string id = message.RawMessage.ToString();
-                uniqueIdSet.Add(id);
-            });
+            foreach (Message message in messageList)
+            {
+                uniqueIdSet.Add(message.RawMessage.ToString());
+            }
 
             // List of persistence actions to be done for each unique id
             List<PersistenceAction> uniquePersistenceActionList = new List<PersistenceAction>();
@@ -94,7 +97,10 @@ namespace Beztek.Facade.Cache
             }
 
             // Remove the ids from the actionable items
-            Parallel.ForEach(toRemoveIds, id => actionableItems.Remove(id));
+            foreach (string id in toRemoveIds)
+            {
+                actionableItems.Remove(id);
+            }
 
             // Execute the unique persistence actions. We do not need the results. If there are no exceptions we conclude that all succeeded
             if (uniquePersistenceActionList.Count > 0)
@@ -104,10 +110,7 @@ namespace Beztek.Facade.Cache
             }
 
             // Build a list of boolean flags for each original message
-            List<bool> results = new List<bool>();
-            Parallel.ForEach(messageList, message => results.Add(true));
-
-            return results;
+            return Enumerable.Repeat(true, messageList.Count).ToList();
         }
 
         // Internal
