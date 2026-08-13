@@ -3,14 +3,14 @@
   <PropertyGroup>
 	  <TargetFramework>net9.0</TargetFramework>
     <id>Beztek.Facade.Cache</id>
-    <version>1.5.2</version>
+    <version>1.5.3</version>
     <authors>Peter Thomas</authors>
     <owners>Beztek Software Solutions</owners>
     <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Beztek-Software-Solutions/cache-facade</projectUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>API facade over various distributed and non-distributed caches</description>
-    <releaseNotes>API facade over various distributed and non-distributed caches</releaseNotes>
+    <releaseNotes>Beztek.Facade.Queue 1.0.9 for write-behind (SQS / partitioned queues available)</releaseNotes>
     <copyright>Copyright 2023, Beztek Software Solutions</copyright>
     <tags>Beztek.Facade.Cache;cache-facade;CacheFacade</tags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Beztek.Facade.Queue" Version="1.0.8" />
+    <PackageReference Include="Beztek.Facade.Queue" Version="1.0.9" />
     <PackageReference Include="Beztek.Facade.Sql" Version="1.2.3" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.10" />
     <PackageReference Include="StackExchange.Redis" Version="3.0.25" />

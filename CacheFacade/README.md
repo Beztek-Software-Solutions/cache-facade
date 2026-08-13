@@ -10,7 +10,7 @@ As part of implementation of micro-services, this library enables the services l
 Having a facade over of the caching operations help us to switch the cache providers without having need to change services code which use the cache. The facade can use the cache in one or more of the following ways:
   - Non-Persistent
   - Write Through - already built with back-end SQL support using the Beztek.Facade.Sql libary
-  - Write Behind - needs the Beztek.Facade.Queue library to handle the asynchronous persistence
+  - Write Behind - needs **Beztek.Facade.Queue ≥ 1.0.9** to handle asynchronous persistence (LocalMemory, Azure Queue Storage, or AWS SQS)
 
 The back-end can be a distributed cache (Redis is the first implementation here), or a non-distributed cache. This library comes with a facade to a local memory cache for cases where a distributed cacheis not needed.
 
