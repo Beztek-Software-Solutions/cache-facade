@@ -8,20 +8,22 @@ namespace Beztek.Facade.Cache.Tests
     using Beztek.Facade.Cache;
 
     [Serializable]
-    public class TestEtagCacheable : IEtagEntity
+    public class TestEtagCacheable : IEtagEntity, IWriteBehindEntity
     {
         private const SerializationType SerType = SerializationType.Json;
 
         public TestEtagCacheable()
         { }
 
-        public TestEtagCacheable(string id, string value, DateTime createdDate, DateTime updatedDate, string etag)
+        public TestEtagCacheable(string id, string value, DateTime createdDate, DateTime updatedDate, string etag, long writeBehindSequence = 0, bool isDeleted = false)
         {
             this.Id = id;
             this.Value = value;
             this.CreatedDate = createdDate;
             this.UpdatedDate = updatedDate;
             this.Etag = etag;
+            this.WriteBehindSequence = writeBehindSequence;
+            this.IsDeleted = isDeleted;
         }
 
         protected TestEtagCacheable(SerializationInfo info, StreamingContext context)
@@ -37,6 +39,8 @@ namespace Beztek.Facade.Cache.Tests
             this.CreatedDate = result.CreatedDate;
             this.UpdatedDate = result.UpdatedDate;
             this.Etag = result.Etag;
+            this.WriteBehindSequence = result.WriteBehindSequence;
+            this.IsDeleted = result.IsDeleted;
         }
 
         public string Id { get; set; }
@@ -48,6 +52,11 @@ namespace Beztek.Facade.Cache.Tests
         public DateTime CreatedDate { get; set; }
 
         public DateTime UpdatedDate { get; set; }
+
+        /// <summary>Test-only interim field; prefer sequential <see cref="Etag"/> as the version clock.</summary>
+        public long WriteBehindSequence { get; set; }
+
+        public bool IsDeleted { get; set; }
 
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
@@ -73,7 +82,9 @@ namespace Beztek.Facade.Cache.Tests
                     && string.Equals(this.Value.ToString(), other.Value.ToString(), StringComparison.Ordinal)
                     && object.Equals(this.CreatedDate, other.CreatedDate)
                     && object.Equals(this.UpdatedDate, other.UpdatedDate)
-                    && string.Equals(this.Etag, other.Etag, StringComparison.Ordinal);
+                    && string.Equals(this.Etag, other.Etag, StringComparison.Ordinal)
+                    && this.WriteBehindSequence == other.WriteBehindSequence
+                    && this.IsDeleted == other.IsDeleted;
             }
 
             return false;

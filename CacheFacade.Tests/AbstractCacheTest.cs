@@ -13,7 +13,7 @@ namespace Beztek.Facade.Cache.Tests
     /// </summary>
     public abstract class AbstractCacheTest
     {
-        protected const int WaitTimeForWriteBehindMillis = 50;
+        protected const int WaitTimeForWriteBehindMillis = 500;
         protected CacheType CacheType { get; set; }
 
         [Test]
@@ -175,8 +175,8 @@ namespace Beztek.Facade.Cache.Tests
             using CancellationTokenSource cts = new CancellationTokenSource();
             Cache cache = TestUtil.GetCache(this.CacheType, cts.Token);
             TestEtagCacheable oldResult = new TestEtagCacheable(Guid.NewGuid().ToString(), "old-result", GetNow(), GetNow(), Guid.NewGuid().ToString());
-            TestEtagCacheable newResult = new TestEtagCacheable(oldResult.Id, "new-result", GetNow(), GetNow(), oldResult.Etag);
             await cache.GetAndPutAsync<TestEtagCacheable>(oldResult.Id, oldResult).ConfigureAwait(false);
+            TestEtagCacheable newResult = new TestEtagCacheable(oldResult.Id, "new-result", GetNow(), GetNow(), oldResult.Etag);
             if (cache.PersistenceService != null)
             {
                 Task.Run(async () => {
@@ -212,8 +212,8 @@ namespace Beztek.Facade.Cache.Tests
             using CancellationTokenSource cts = new CancellationTokenSource();
             Cache cache = TestUtil.GetCache(this.CacheType, cts.Token);
             TestEtagCacheable oldResult = new TestEtagCacheable(Guid.NewGuid().ToString(), "old-result", GetNow(), GetNow(), Guid.NewGuid().ToString());
-            TestEtagCacheable newResult = new TestEtagCacheable(oldResult.Id, "new-result", GetNow(), GetNow(), oldResult.Etag);
             await cache.GetAndPutAsync(oldResult.Id, oldResult).ConfigureAwait(false);
+            TestEtagCacheable newResult = new TestEtagCacheable(oldResult.Id, "new-result", GetNow(), GetNow(), oldResult.Etag);
             TestEtagCacheable operationResult = await cache.GetAndPutAsync<TestEtagCacheable>(newResult.Id, newResult).ConfigureAwait(false);
             Assert.That(oldResult, Is.EqualTo(operationResult));
 

@@ -90,7 +90,7 @@ namespace Beztek.Facade.Cache
                     this.queueClient = (QueueClient)cacheConfiguration.QueueConfiguration.QueueClient;
 
                     DefaultProcessorHandler handler = new DefaultProcessorHandler();
-                    IQueueProcessorHandler queyeProcessorhandler = handler.AddProcessor(typeof(string), cacheConfiguration.QueueConfiguration.MessageProcessor);
+                    IQueueProcessorHandler queyeProcessorhandler = handler.AddProcessor(typeof(WriteBehindMessage), cacheConfiguration.QueueConfiguration.MessageProcessor);
 
                     // Setup of dequeueing for the write-behind cache
                     this.queueClient.DequeueAndProcess(
@@ -200,6 +200,14 @@ namespace Beztek.Facade.Cache
                 }
 
                 // There isn't anything in the cache if we get here. Delegate to the cache provider
+                if (value is IEtagEntity etagEntity)
+                {
+                    etagEntity.Etag = EtagUtil.GenerateEtag();
+                }
+
+                WriteBehindMessage writeBehindMessage = this.CacheType == CacheType.WriteBehind
+                    ? BuildWriteBehindMessage(key, WriteType.Create, value)
+                    : null;
                 this.CacheProvider.Put(key, value);
 
                 switch (this.CacheType)
@@ -209,7 +217,7 @@ namespace Beztek.Facade.Cache
                         break;
 
                     case CacheType.WriteBehind:
-                        await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
+                        await this.queueClient.Enqueue(writeBehindMessage, true).ConfigureAwait(false);
                         break;
                 }
 
@@ -253,10 +261,13 @@ namespace Beztek.Facade.Cache
                             throw new ConcurrencyException("Object was already updated first");
                         }
 
-                        // Object is fresh, set with new Etag
+                        // Sequential etag for all IEtagEntity types (same format write-through / write-behind).
                         currObject.Etag = EtagUtil.GenerateEtag();
                     }
 
+                    WriteBehindMessage writeBehindMessage = this.CacheType == CacheType.WriteBehind
+                        ? BuildWriteBehindMessage(key, WriteType.Update, value)
+                        : null;
                     this.CacheProvider.Put(key, value);
 
                     switch (this.CacheType)
@@ -266,7 +277,7 @@ namespace Beztek.Facade.Cache
                             break;
 
                         case CacheType.WriteBehind:
-                            await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
+                            await this.queueClient.Enqueue(writeBehindMessage, true).ConfigureAwait(false);
                             break;
                     }
                 }
@@ -331,7 +342,7 @@ namespace Beztek.Facade.Cache
                         break;
 
                     case CacheType.WriteBehind:
-                        await this.queueClient.Enqueue<string>(key, true).ConfigureAwait(false);
+                        await this.queueClient.Enqueue(BuildWriteBehindMessage(key, WriteType.Delete, result), true).ConfigureAwait(false);
                         break;
                 }
 
@@ -456,6 +467,46 @@ namespace Beztek.Facade.Cache
                 this.CacheProvider.Remove<T>(key);
             }
             return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Builds a flush-safe write-behind payload. Sequence always comes from
+        /// <see cref="EtagUtil.NextSequence"/> so create/update/delete share one monotonic clock.
+        /// Create/update stamp that value onto <see cref="IWriteBehindEntity.Etag"/> when applicable.
+        /// Delete leaves the returned snapshot unchanged; the processor applies tombstone metadata from Sequence.
+        /// </summary>
+        private static WriteBehindMessage BuildWriteBehindMessage(string id, WriteType writeType, object value)
+        {
+            long sequence;
+            if (value is IWriteBehindEntity entity && writeType != WriteType.Delete)
+            {
+                // Prefer etag already stamped on this write (create/replace via GenerateEtag).
+                long fromEtag = EtagUtil.ParseSequentialEtag(entity.Etag);
+                if (fromEtag > 0)
+                {
+                    sequence = fromEtag;
+                }
+                else
+                {
+                    sequence = EtagUtil.NextSequence();
+                    entity.Etag = sequence.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
+
+                entity.IsDeleted = false;
+            }
+            else
+            {
+                // Deletes (and non-write-behind payloads) advance the shared monotonic clock.
+                sequence = EtagUtil.NextSequence();
+            }
+
+            return new WriteBehindMessage
+            {
+                Id = id,
+                WriteType = writeType,
+                Value = value,
+                Sequence = sequence
+            };
         }
     }
 }

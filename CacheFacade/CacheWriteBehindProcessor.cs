@@ -2,13 +2,20 @@
 
 namespace Beztek.Facade.Cache
 {
+    using System;
     using System.Collections.Generic;
+    using System.Globalization;
     using System.Linq;
+    using System.Reflection;
+    using System.Text.Json;
     using System.Threading.Tasks;
     using Beztek.Facade.Queue;
 
     public class CacheWriteBehindProcessor<T> : IMessageProcessor
     {
+        private static readonly bool SupportsWriteBehindEntity = typeof(IWriteBehindEntity).IsAssignableFrom(typeof(T));
+        private static readonly PropertyInfo IdProperty = typeof(T).GetProperty("Id", BindingFlags.Public | BindingFlags.Instance);
+
         private readonly string cacheName;
         private Cache cache;
 
@@ -19,101 +26,145 @@ namespace Beztek.Facade.Cache
 
         public virtual async Task<bool> Process(Message message)
         {
-            // Piggy-back off the more complex logic that can process lists of messages
             return (await this.Process(new List<Message> { message }).ConfigureAwait(false))[0];
         }
 
-        // Since we need to handle out-of-order messages, we need additional logic based on if the entity is in the cache and DB or not.
-        // i.e., the latest state of the cache and the content of the DB determines whether we insert, update or delete
+        /// <summary>
+        /// Drains write-behind messages from the queue snapshot (intent + value + sequence).
+        /// Does not read the live cache. Create/update map to upsert. When <typeparamref name="T"/>
+        /// implements <see cref="IWriteBehindEntity"/>, deletes are soft-upserts that retain the
+        /// sequential etag clock (OpenSearch soft-delete analogue).
+        /// </summary>
         public virtual async Task<List<bool>> Process(List<Message> messageList)
         {
-            // This holds a set of only one entry per id, for each list of messages.
-            // These collections are not thread-safe, so the loops below must stay sequential:
-            // concurrent mutation corrupts them into yielding duplicate or null ids.
-            HashSet<string> uniqueIdSet = new HashSet<string>();
+            Dictionary<string, WriteBehindMessage> winnersById = new Dictionary<string, WriteBehindMessage>(StringComparer.Ordinal);
 
             foreach (Message message in messageList)
             {
-                uniqueIdSet.Add(message.RawMessage.ToString());
+                WriteBehindMessage writeBehindMessage = ParseWriteBehindMessage(message);
+                if (writeBehindMessage == null || string.IsNullOrEmpty(writeBehindMessage.Id))
+                {
+                    continue;
+                }
+
+                if (!winnersById.TryGetValue(writeBehindMessage.Id, out WriteBehindMessage existing)
+                    || writeBehindMessage.Sequence >= existing.Sequence)
+                {
+                    winnersById[writeBehindMessage.Id] = writeBehindMessage;
+                }
             }
 
-            // List of persistence actions to be done for each unique id
             List<PersistenceAction> uniquePersistenceActionList = new List<PersistenceAction>();
+            Dictionary<string, object> actionableItems = new Dictionary<string, object>(StringComparer.Ordinal);
 
-            // Dictionary of mapped entities which come from the cache and are needed for saving
-            Dictionary<string, object> actionableItems = new Dictionary<string, object>();
-
-            // Keep track of ids where there is no chagne needed in the DB, to remove it prior to making the DB update
-            List<string> toRemoveIds = new List<string>();
-            foreach (string id in uniqueIdSet)
+            foreach (WriteBehindMessage winner in winnersById.Values)
             {
-                // Get from the underlying cache provider rather than the cache itself, since the cache provider is the source of truth for write-behind actions
-                T cachedItem = this.GetCache().CacheProvider.Get<T>(id);
-
-                // Also get the item from the DB.
-                T savedItem = (T)await this.GetCache().PersistenceService.GetByIdAsync(id).ConfigureAwait(false);
-
-                // Insert or Update case: item is in the cache
-                if (cachedItem != null)
+                if (winner.WriteType == WriteType.Delete)
                 {
-                    actionableItems.Add(id, cachedItem);
-
-                    // Insert case: item not in DB
-                    if (savedItem == null)
+                    if (SupportsWriteBehindEntity)
                     {
-                        uniquePersistenceActionList.Add(new PersistenceAction(id, WriteType.Create));
-                    }
-
-                    // Update case: item in DB
-                    else
-                    {
-                        // If the cached item is the same as the saved item, then no need to execute an UPDATE statement
-                        if (cachedItem.Equals(savedItem))
+                        T tombstone = BuildSoftDeleteSnapshot(winner);
+                        if (tombstone == null)
                         {
-                            toRemoveIds.Add(id);
+                            continue;
                         }
-                        else
-                        {
-                            uniquePersistenceActionList.Add(new PersistenceAction(id, WriteType.Update));
-                        }
-                    }
-                }
 
-                // Delete case: item is not in the cache
-                else
-                {
-                    actionableItems.Add(id, default(T));
-
-                    // If the item does not exist in the DB, then no need to execute a DELETE statement
-                    if (savedItem == null)
-                    {
-                        toRemoveIds.Add(id);
+                        uniquePersistenceActionList.Add(new PersistenceAction(winner.Id, WriteType.Upsert));
+                        actionableItems[winner.Id] = tombstone;
                     }
                     else
                     {
-                        uniquePersistenceActionList.Add(new PersistenceAction(id, WriteType.Delete));
+                        uniquePersistenceActionList.Add(new PersistenceAction(winner.Id, WriteType.Delete));
+                        actionableItems[winner.Id] = default(T);
                     }
+
+                    continue;
                 }
+
+                T value = CoerceValue(winner.Value);
+                ApplyWriteBehindMetadata(value, winner.Sequence, isDeleted: false);
+
+                uniquePersistenceActionList.Add(new PersistenceAction(winner.Id, WriteType.Upsert));
+                actionableItems[winner.Id] = value;
             }
 
-            // Remove the ids from the actionable items
-            foreach (string id in toRemoveIds)
-            {
-                actionableItems.Remove(id);
-            }
-
-            // Execute the unique persistence actions. We do not need the results. If there are no exceptions we conclude that all succeeded
             if (uniquePersistenceActionList.Count > 0)
             {
-                // We have not whittled down our actinalable items to the minimal set of writes we need to perform on the DB, and we will do them all in one transaction
                 await this.GetCache().PersistenceService.BatchPersistAsync(uniquePersistenceActionList, actionableItems).ConfigureAwait(false);
             }
 
-            // Build a list of boolean flags for each original message
             return Enumerable.Repeat(true, messageList.Count).ToList();
         }
 
-        // Internal
+        private static T BuildSoftDeleteSnapshot(WriteBehindMessage winner)
+        {
+            T value = CoerceValue(winner.Value);
+            if (value == null)
+            {
+                try
+                {
+                    value = Activator.CreateInstance<T>();
+                }
+                catch (MissingMethodException)
+                {
+                    return default;
+                }
+
+                IdProperty?.SetValue(value, winner.Id);
+            }
+
+            ApplyWriteBehindMetadata(value, winner.Sequence, isDeleted: true);
+            return value;
+        }
+
+        private static void ApplyWriteBehindMetadata(T value, long sequence, bool isDeleted)
+        {
+            if (value is IWriteBehindEntity entity)
+            {
+                entity.Etag = sequence.ToString(CultureInfo.InvariantCulture);
+                entity.IsDeleted = isDeleted;
+            }
+        }
+
+        private static WriteBehindMessage ParseWriteBehindMessage(Message message)
+        {
+            if (message?.RawMessage == null)
+            {
+                return null;
+            }
+
+            if (message.RawMessage is WriteBehindMessage writeBehindMessage)
+            {
+                return writeBehindMessage;
+            }
+
+            return message.GetMessageObject<WriteBehindMessage>();
+        }
+
+        private static T CoerceValue(object value)
+        {
+            if (value == null)
+            {
+                return default;
+            }
+
+            if (value is T typed)
+            {
+                return typed;
+            }
+
+            if (value is JsonElement jsonElement)
+            {
+                if (jsonElement.ValueKind == JsonValueKind.Null || jsonElement.ValueKind == JsonValueKind.Undefined)
+                {
+                    return default;
+                }
+
+                return jsonElement.Deserialize<T>();
+            }
+
+            return SerializationUtil.JsonDeserialize<T>(Convert.ToString(value));
+        }
 
         private Cache GetCache()
         {

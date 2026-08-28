@@ -22,7 +22,14 @@ namespace Beztek.Facade.Cache
         public virtual async Task<object> GetByIdAsync(string id)
         {
             SqlSelect sqlSelect = this.sqlGenerator.GetSqlSelect(id);
-            return await Task.FromResult<object>(sqlFacade.GetSingleResult<T>(sqlSelect)).ConfigureAwait(false);
+            T result = sqlFacade.GetSingleResult<T>(sqlSelect);
+            if (result is IWriteBehindEntity writeBehindEntity && writeBehindEntity.IsDeleted)
+            {
+                // Soft-delete tombstone: treat as missing for cache hydration and API reads.
+                return await Task.FromResult<object>(null).ConfigureAwait(false);
+            }
+
+            return await Task.FromResult<object>(result).ConfigureAwait(false);
         }
 
         public virtual async Task<int> UpdateAsync(string id, object value)
@@ -61,10 +68,10 @@ namespace Beztek.Facade.Cache
                 switch (persistenceAction.WriteType)
                 {
                     case WriteType.Create:
-                        batchWrites = this.sqlGenerator.GetSqlInsert(persistenceAction.Id, (T)actionableItems[persistenceAction.Id]);
-                        break;
                     case WriteType.Update:
-                        batchWrites = this.sqlGenerator.GetSqlUpdate(persistenceAction.Id, (T)actionableItems[persistenceAction.Id]);
+                    case WriteType.Upsert:
+                        // Write-behind drain uses upsert for create/update; keeps a single write path.
+                        batchWrites = this.sqlGenerator.GetSqlUpsert(persistenceAction.Id, (T)actionableItems[persistenceAction.Id]);
                         break;
                     case WriteType.Delete:
                         batchWrites = this.sqlGenerator.GetSqlDelete(persistenceAction.Id);
@@ -78,15 +85,18 @@ namespace Beztek.Facade.Cache
             // Execute all the SQL
             IList<int> numWritesList = this.sqlFacade.ExecuteMultiSqlWrite(allWrites);
 
-            // Iterate through each set of batch writes, and determine if the object got written
+            // Iterate through each set of batch writes, and determine if the object got written.
+            // actionIndex indexes persistenceActions; writeOffset indexes into the flat numWritesList
+            // (an upsert may contribute multiple ISqlWrite statements).
             IDictionary<PersistenceAction, int> result = new Dictionary<PersistenceAction, int>();
-            int actionIndex = 0;
-            foreach (List<ISqlWrite> batchWrites in batchWriteList)
+            int writeOffset = 0;
+            for (int actionIndex = 0; actionIndex < batchWriteList.Count; actionIndex++)
             {
-                IEnumerable<int> results = numWritesList.Skip(actionIndex).Take(batchWrites.Count);
+                List<ISqlWrite> batchWrites = batchWriteList[actionIndex];
+                IEnumerable<int> results = numWritesList.Skip(writeOffset).Take(batchWrites.Count);
                 int numWrites = GetIsWritten(results);
                 result.Add(persistenceActions[actionIndex], numWrites);
-                actionIndex = actionIndex + batchWrites.Count;
+                writeOffset += batchWrites.Count;
             }
 
             return await Task.FromResult<IDictionary<PersistenceAction, int>>(result).ConfigureAwait(false);

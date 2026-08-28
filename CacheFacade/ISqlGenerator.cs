@@ -41,5 +41,16 @@ namespace Beztek.Facade.Cache
         /// <param name="t">list of ISqlWrite statements to create entity T</param>
         /// <returns></returns>
         List<ISqlWrite> GetSqlInsert(string id, T t);
+
+        /// <summary>
+        /// Provides dialect-specific insert-or-update statements for write-behind batch drain.
+        /// When <typeparamref name="T"/> implements <see cref="IWriteBehindVersion"/>, prefer
+        /// version-gated SQL using the entity's sequential <see cref="IEtagEntity.Etag"/>
+        /// (and soft-delete flag when using <see cref="IWriteBehindEntity"/>).
+        /// </summary>
+        /// <param name="id">The id of the entity to upsert</param>
+        /// <param name="t">The entity snapshot to persist</param>
+        /// <returns>List of ISqlWrite statements that upsert entity T</returns>
+        List<ISqlWrite> GetSqlUpsert(string id, T t);
     }
 }

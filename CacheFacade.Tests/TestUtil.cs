@@ -55,7 +55,7 @@ namespace Beztek.Facade.Cache.Tests
         internal static void InitializeDB(ISqlFacade sqlFacade)
         {
             // Create the tables for the tests
-            string stm1 = "CREATE TABLE IF NOT EXISTS test_etag_cacheable(id TEXT PRIMARY KEY, value TEXT, created_date TIMESTAMP, updated_date TIMESTAMP, etag TEXT)";
+            string stm1 = "CREATE TABLE IF NOT EXISTS test_etag_cacheable(id TEXT PRIMARY KEY, value TEXT, created_date TIMESTAMP, updated_date TIMESTAMP, etag TEXT, is_deleted INTEGER NOT NULL DEFAULT 0)";
             string stm2 = "DELETE FROM test_etag_cacheable";
 
             using (IDbConnection con = sqlFacade.GetSqlFacadeConfig().GetConnection())

@@ -24,7 +24,11 @@ namespace Beztek.Facade.Cache
     {
         Create,
         Update,
-        Delete
+        Delete,
+        /// <summary>
+        /// Insert-or-update used by write-behind batch drain (create/update queue intents map here).
+        /// </summary>
+        Upsert
     }
 
     public enum SerializationType
