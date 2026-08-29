@@ -33,6 +33,9 @@ namespace Beztek.Facade.Cache
         private readonly IDistributedLock DistributedLock;
         protected ILogger Logger { get; set; }
 
+        /// <summary>Same-assembly access for write-behind drain diagnostics.</summary>
+        internal ILogger FacadeLogger => this.Logger;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Cache"/> class using cache configuration and logger object.
         /// </summary>

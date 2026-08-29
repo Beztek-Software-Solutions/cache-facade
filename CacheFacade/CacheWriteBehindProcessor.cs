@@ -10,6 +10,7 @@ namespace Beztek.Facade.Cache
     using System.Text.Json;
     using System.Threading.Tasks;
     using Beztek.Facade.Queue;
+    using Microsoft.Extensions.Logging;
 
     public class CacheWriteBehindProcessor<T> : IMessageProcessor
     {
@@ -47,10 +48,28 @@ namespace Beztek.Facade.Cache
                     continue;
                 }
 
-                if (!winnersById.TryGetValue(writeBehindMessage.Id, out WriteBehindMessage existing)
-                    || writeBehindMessage.Sequence >= existing.Sequence)
+                if (!winnersById.TryGetValue(writeBehindMessage.Id, out WriteBehindMessage existing))
                 {
                     winnersById[writeBehindMessage.Id] = writeBehindMessage;
+                    continue;
+                }
+
+                if (writeBehindMessage.Sequence >= existing.Sequence)
+                {
+                    this.GetCache().FacadeLogger?.LogDebug(
+                        "Write-behind discarded queued snapshot for {CacheKey} (not latest in batch): sequence {DiscardedSequence} <= {KeptSequence}",
+                        existing.Id,
+                        existing.Sequence,
+                        writeBehindMessage.Sequence);
+                    winnersById[writeBehindMessage.Id] = writeBehindMessage;
+                }
+                else
+                {
+                    this.GetCache().FacadeLogger?.LogDebug(
+                        "Write-behind discarded queued snapshot for {CacheKey} (not latest in batch): sequence {DiscardedSequence} < {KeptSequence}",
+                        writeBehindMessage.Id,
+                        writeBehindMessage.Sequence,
+                        existing.Sequence);
                 }
             }
 

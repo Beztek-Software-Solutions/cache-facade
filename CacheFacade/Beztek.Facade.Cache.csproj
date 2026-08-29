@@ -3,14 +3,14 @@
   <PropertyGroup>
 	  <TargetFramework>net9.0</TargetFramework>
     <id>Beztek.Facade.Cache</id>
-    <version>1.5.5</version>
+    <version>1.5.6</version>
     <authors>Peter Thomas</authors>
     <owners>Beztek Software Solutions</owners>
     <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Beztek-Software-Solutions/cache-facade</projectUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>API facade over various distributed and non-distributed caches</description>
-    <releaseNotes>Beztek.Facade.Queue 1.0.9 for write-behind (SQS / partitioned queues available)</releaseNotes>
+    <releaseNotes>EtagEntityUpdateHelper: configurable retries/backoff (defaults 5 retries, exponential 5–200ms)</releaseNotes>
     <copyright>Copyright 2023, Beztek Software Solutions</copyright>
     <tags>Beztek.Facade.Cache;cache-facade;CacheFacade</tags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>

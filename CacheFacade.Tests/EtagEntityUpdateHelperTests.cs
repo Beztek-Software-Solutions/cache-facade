@@ -14,6 +14,7 @@ namespace Beztek.Facade.Cache.Tests
         [SetUp]
         public void SetUp()
         {
+            EtagEntityUpdateHelper.Configure(null);
             CacheConfiguration cacheConfiguration = new CacheConfiguration(new LocalMemoryProviderConfiguration("EtagEntityUpdateHelperTests", 300000), CacheType.NonPersistent);
             this.cache = CacheFactory.GetOrCreateCache(cacheConfiguration);
         }
@@ -31,6 +32,57 @@ namespace Beztek.Facade.Cache.Tests
         {
             // the paramter "true" would cause a concurrency exception every time the function used by the helper is called
             Assert.ThrowsAsync<ConcurrencyException>(async () => await this.ParameterizedTest(true));
+        }
+
+        [Test]
+        public void RetryPolicy_UsesFiveRetriesWithExponentialBackoff()
+        {
+            EtagEntityUpdateHelper.Configure(new EtagEntityUpdateOptions
+            {
+                MaxRetryCount = 5,
+                InitialRetryDelayMillis = 5,
+                MaxRetryDelayMillis = 200,
+                UseExponentialBackoff = true,
+            });
+
+            Assert.That(EtagEntityUpdateHelper.MaxRetryCount, Is.EqualTo(5));
+            Assert.That(EtagEntityUpdateHelper.InitialRetryDelayMillis, Is.EqualTo(5));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(0), Is.EqualTo(5));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(1), Is.EqualTo(10));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(2), Is.EqualTo(20));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(3), Is.EqualTo(40));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(4), Is.EqualTo(80));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(5), Is.EqualTo(160));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(10), Is.EqualTo(EtagEntityUpdateHelper.MaxRetryDelayMillis));
+        }
+
+        [Test]
+        public void Configure_AndPerCallOptions_AreHonored()
+        {
+            EtagEntityUpdateHelper.Configure(new EtagEntityUpdateOptions
+            {
+                MaxRetryCount = 2,
+                InitialRetryDelayMillis = 3,
+                MaxRetryDelayMillis = 50,
+                UseExponentialBackoff = false,
+            });
+
+            Assert.That(EtagEntityUpdateHelper.MaxRetryCount, Is.EqualTo(2));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(0), Is.EqualTo(3));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(4), Is.EqualTo(3));
+
+            var perCall = new EtagEntityUpdateOptions
+            {
+                MaxRetryCount = 1,
+                InitialRetryDelayMillis = 7,
+                MaxRetryDelayMillis = 100,
+                UseExponentialBackoff = true,
+            };
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(0, perCall), Is.EqualTo(7));
+            Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(1, perCall), Is.EqualTo(14));
+
+            // Reset for other tests.
+            EtagEntityUpdateHelper.Configure(null);
         }
 
         // Internal 
