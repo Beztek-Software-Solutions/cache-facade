@@ -10,7 +10,7 @@ As part of implementation of micro-services, this library enables the services l
 Having a facade over of the caching operations help us to switch the cache providers without having need to change services code which use the cache. The facade can use the cache in one or more of the following ways:
   - Non-Persistent
   - Write Through - already built with back-end SQL support using the Beztek.Facade.Sql libary
-  - Write Behind - needs **Beztek.Facade.Queue ≥ 1.0.9** (LocalMemory, Azure Queue Storage, or AWS SQS). See [Write-behind cache](#write-behind-cache) below.
+  - Write Behind - needs **Beztek.Facade.Queue ≥ 1.0.10** (LocalMemory, Azure Queue Storage, or AWS SQS). See [Write-behind cache](#write-behind-cache) below.
 
 The back-end can be a distributed cache (Redis is the first implementation here), or a non-distributed cache. This library comes with a facade to a local memory cache for cases where a distributed cacheis not needed.
 
@@ -97,7 +97,7 @@ Upsert SQL should be version-gated, e.g. only apply when the incoming sequential
 
 ### Consumer checklist
 
-1. **Queue:** `Beztek.Facade.Queue` ≥ 1.0.9; register processor for `WriteBehindMessage` (not `string`).
+1. **Queue:** `Beztek.Facade.Queue` ≥ 1.0.10; register processor for `WriteBehindMessage` (not `string`). Configure `QueueConfiguration.MaxProcessingAttempts` (default 5). On max failures or `false`, messages land on the poison queue — use `PeekUnprocessedMessagesAsync` / `RequeueUnprocessedMessagesAsync` to inspect or retry.
 2. **SQL:** implement `ISqlGenerator.GetSqlUpsert` (dialect-specific insert-or-update). Write-behind create/update drain through upsert; write-through may keep distinct insert/update.
 3. **Schema (write-behind entities):** keep `etag` (store sequential strings); add `is_deleted` (bool). Filter deleted rows in reads.
 4. **Entity:** implement `IWriteBehindEntity` (`Etag` + `IsDeleted`).

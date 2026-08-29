@@ -102,7 +102,8 @@ namespace Beztek.Facade.Cache
                         queyeProcessorhandler,
                         cacheConfiguration.QueueConfiguration.CancellationToken,
                         cacheConfiguration.QueueConfiguration.BatchSize,
-                        cacheConfiguration.QueueConfiguration.PollIntervalMillis
+                        cacheConfiguration.QueueConfiguration.PollIntervalMillis,
+                        cacheConfiguration.QueueConfiguration.MaxProcessingAttempts
                     );
                 }
             }
