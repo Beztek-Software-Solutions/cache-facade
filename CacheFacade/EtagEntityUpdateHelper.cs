@@ -5,6 +5,11 @@ namespace Beztek.Facade.Cache
     using System;
     using System.Threading.Tasks;
 
+    /// <summary>
+    /// Retries optimistic <see cref="ICache.GetAndPutAsync{T}"/> updates when
+    /// <see cref="ConcurrencyException"/> is thrown (stale etag). Uses process-wide
+    /// <see cref="Defaults"/> or a per-call <see cref="EtagEntityUpdateOptions"/>.
+    /// </summary>
     public static class EtagEntityUpdateHelper
     {
         private static readonly object DefaultsGate = new object();
@@ -25,8 +30,10 @@ namespace Beztek.Facade.Cache
         /// </summary>
         public static int MaxRetryCount => Defaults.MaxRetryCount;
 
+        /// <summary>Current process-wide initial retry delay in milliseconds.</summary>
         public static int InitialRetryDelayMillis => Defaults.InitialRetryDelayMillis;
 
+        /// <summary>Current process-wide maximum retry delay in milliseconds.</summary>
         public static int MaxRetryDelayMillis => Defaults.MaxRetryDelayMillis;
 
         /// <summary>Process-wide defaults applied when no per-call options are supplied.</summary>
@@ -53,6 +60,17 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        /// <summary>
+        /// Loads the entity, applies <paramref name="updateFunction"/>, and puts it back,
+        /// retrying on <see cref="ConcurrencyException"/> using process-wide <see cref="Defaults"/>.
+        /// </summary>
+        /// <typeparam name="T">Entity type implementing <see cref="IEtagEntity"/>.</typeparam>
+        /// <param name="cache">Cache holding the entity.</param>
+        /// <param name="key">Cache key.</param>
+        /// <param name="parameters">Opaque arguments passed to <paramref name="updateFunction"/>.</param>
+        /// <param name="updateFunction">Mutates a loaded entity and returns the updated instance.</param>
+        /// <returns>The entity as stored after a successful put.</returns>
+        /// <exception cref="ConcurrencyException">Thrown when all retries fail.</exception>
         public static Task<T> UpdateEntityAsync<T>(
             ICache cache,
             string key,
@@ -61,6 +79,19 @@ namespace Beztek.Facade.Cache
             where T : IEtagEntity
             => UpdateEntityAsync(cache, key, parameters, updateFunction, options: null);
 
+        /// <summary>
+        /// Loads the entity, applies <paramref name="updateFunction"/>, and puts it back,
+        /// retrying on <see cref="ConcurrencyException"/> using <paramref name="options"/>
+        /// (or <see cref="Defaults"/> when <paramref name="options"/> is <c>null</c>).
+        /// </summary>
+        /// <typeparam name="T">Entity type implementing <see cref="IEtagEntity"/>.</typeparam>
+        /// <param name="cache">Cache holding the entity.</param>
+        /// <param name="key">Cache key.</param>
+        /// <param name="parameters">Opaque arguments passed to <paramref name="updateFunction"/>.</param>
+        /// <param name="updateFunction">Mutates a loaded entity and returns the updated instance.</param>
+        /// <param name="options">Per-call retry settings; <c>null</c> uses process-wide defaults.</param>
+        /// <returns>The entity as stored after a successful put.</returns>
+        /// <exception cref="ConcurrencyException">Thrown when all retries fail.</exception>
         public static async Task<T> UpdateEntityAsync<T>(
             ICache cache,
             string key,

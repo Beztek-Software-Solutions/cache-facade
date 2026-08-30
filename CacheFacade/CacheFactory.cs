@@ -7,10 +7,25 @@ namespace Beztek.Facade.Cache
     using System.Threading;
     using Microsoft.Extensions.Logging;
 
+    /// <summary>
+    /// Static registry of named <see cref="ICache"/> instances.
+    /// Caches are keyed by <see cref="ICacheProviderConfiguration.CacheName"/> and created at most once.
+    /// </summary>
     public static class CacheFactory
     {
         private static readonly ConcurrentDictionary<string, ICache> CacheDictionary = new ConcurrentDictionary<string, ICache>();
 
+        /// <summary>
+        /// Returns an existing cache for the configuration's cache name, or creates and registers a new one.
+        /// Write-through requires <see cref="CacheConfiguration.PersistenceService"/>;
+        /// write-behind also requires <see cref="CacheConfiguration.QueueConfiguration"/>.
+        /// </summary>
+        /// <param name="cacheConfiguration">Provider, cache type, and optional persistence/queue settings.</param>
+        /// <param name="logger">Optional logger for facade diagnostics.</param>
+        /// <returns>The registered <see cref="ICache"/> for the configuration's cache name.</returns>
+        /// <exception cref="ArgumentException">
+        /// Thrown when write-through/write-behind is missing required persistence or queue configuration.
+        /// </exception>
         public static ICache GetOrCreateCache(CacheConfiguration cacheConfiguration, ILogger logger = null)
         {
             // Sets the minimum number of threads the .NET ThreadPool keeps "warm" before it starts introducing delays.
@@ -43,6 +58,11 @@ namespace Beztek.Facade.Cache
             return result;
         }
 
+        /// <summary>
+        /// Looks up a previously registered cache by name.
+        /// </summary>
+        /// <param name="cacheName">Name matching <see cref="ICacheProviderConfiguration.CacheName"/>.</param>
+        /// <returns>The cache, or <c>null</c> if none has been created for that name.</returns>
         public static ICache GetCache(string cacheName)
         {
             ICache result;

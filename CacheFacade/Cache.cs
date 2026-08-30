@@ -17,20 +17,22 @@ namespace Beztek.Facade.Cache
     using RedLockNet.SERedis.Configuration;
 
     /// <summary>
-    /// Internal abstraction of the cache provider which provides structure of basic operations including the logging methods (trace logs and dependency metrics).
+    /// Facade implementation of <see cref="ICache"/>. Construct only via <see cref="CacheFactory"/>;
+    /// the constructor is internal.
     /// </summary>
-    /// <typeparam name="T">Data type of the cache item value. By default, the cache item will have a string based key.</typeparam>
     public class Cache : ICache
     {
         private const string LockCacheName = "lockCache";
         private const long LockTimeToLiveMillis = 3000;
         private const long LockAcquireTimeoutMillis = 1000;
 
+        /// <inheritdoc />
         public CacheType CacheType { get; }
         internal ICacheProvider CacheProvider { get; set; }
         internal IPersistenceService PersistenceService { get; }
         private readonly QueueClient queueClient;
         private readonly IDistributedLock DistributedLock;
+        /// <summary>Optional logger for facade diagnostics.</summary>
         protected ILogger Logger { get; set; }
 
         /// <summary>Same-assembly access for write-behind drain diagnostics.</summary>
@@ -114,6 +116,7 @@ namespace Beztek.Facade.Cache
                 this.PersistenceService = cacheConfiguration.PersistenceService;
             }
         }
+        /// <inheritdoc />
         public async Task<T> GetAsync<T>(string key)
         {
             // Create a lock
@@ -151,6 +154,7 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        /// <inheritdoc />
         public Task<T> PeekAsync<T>(string key)
         {
             try
@@ -166,6 +170,7 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        /// <inheritdoc />
         public Task WarmAsync<T>(string key, T value)
         {
             if (value == null)
@@ -187,6 +192,7 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        /// <inheritdoc />
         public async Task<T> GetAndPutIfAbsentAsync<T>(string key, T value)
         {
             using IDisposable currLock = this.AcquireLock($"_gpa-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
@@ -238,6 +244,7 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        /// <inheritdoc />
         public async Task<T> GetAndReplaceAsync<T>(string key, T value)
         {
             using IDisposable currLock = this.AcquireLock($"_gr-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
@@ -304,6 +311,7 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        /// <inheritdoc />
         public async Task<T> GetAndPutAsync<T>(string key, T value)
         {
             using IDisposable currLock = this.AcquireLock($"_gp-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
@@ -327,6 +335,7 @@ namespace Beztek.Facade.Cache
             return result;
         }
 
+        /// <inheritdoc />
         public async Task<T> RemoveAsync<T>(string key)
         {
             using IDisposable currLock = this.AcquireLock($"r-{key}", LockAcquireTimeoutMillis, LockTimeToLiveMillis, CalculateRetryIntervalMillis(LockAcquireTimeoutMillis));
@@ -366,6 +375,7 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        /// <inheritdoc />
         public async Task<PagedResults<T>> SearchByQueryAsync<T>(SqlSelect query, int pageNum, int pageSize, bool retrieveTotalNumResults = false)
         {
             if (this.CacheType == CacheType.WriteThrough || this.CacheType == CacheType.WriteBehind)
@@ -396,6 +406,7 @@ namespace Beztek.Facade.Cache
             throw new NotSupportedException();
         }
 
+        /// <inheritdoc />
         public Task<bool> FlushKeyAsync<T>(string key)
         {
             if (key != null)
@@ -407,6 +418,7 @@ namespace Beztek.Facade.Cache
             return Task.FromResult(false);
         }
 
+        /// <inheritdoc />
         public async Task<bool> FlushAsync<T>(ICollection<string> keysToFlush = null)
         {
             if (keysToFlush == null)
@@ -435,6 +447,7 @@ namespace Beztek.Facade.Cache
             }
         }
 
+        /// <inheritdoc />
         public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
         {
             // The LockCache itself does not have an internal lockCache, so it should not acquire a lock
@@ -476,7 +489,7 @@ namespace Beztek.Facade.Cache
         /// <summary>
         /// Builds a flush-safe write-behind payload. Sequence always comes from
         /// <see cref="EtagUtil.NextSequence"/> so create/update/delete share one monotonic clock.
-        /// Create/update stamp that value onto <see cref="IWriteBehindEntity.Etag"/> when applicable.
+        /// Create/update stamp that value onto <see cref="IEtagEntity.Etag"/> when applicable.
         /// Delete leaves the returned snapshot unchanged; the processor applies tombstone metadata from Sequence.
         /// </summary>
         private static WriteBehindMessage BuildWriteBehindMessage(string id, WriteType writeType, object value)

@@ -8,17 +8,29 @@ namespace Beztek.Facade.Cache
 
     using Beztek.Facade.Sql;
 
+    /// <summary>
+    /// <see cref="IPersistenceService"/> backed by <see cref="ISqlFacade"/> and an
+    /// <see cref="ISqlGenerator{T}"/> for entity type <typeparamref name="T"/>.
+    /// Soft-deleted <see cref="IWriteBehindEntity"/> rows are treated as missing on read.
+    /// </summary>
+    /// <typeparam name="T">Entity type mapped by the SQL generator.</typeparam>
     public class SqlPersistenceService<T> : IPersistenceService
     {
         private readonly ISqlFacade sqlFacade;
         private readonly ISqlGenerator<T> sqlGenerator;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SqlPersistenceService{T}"/> class.
+        /// </summary>
+        /// <param name="sqlFacade">SQL facade used to execute statements.</param>
+        /// <param name="sqlGenerator">Dialect-specific CRUD/upsert SQL for <typeparamref name="T"/>.</param>
         public SqlPersistenceService(ISqlFacade sqlFacade, ISqlGenerator<T> sqlGenerator)
         {
             this.sqlFacade = sqlFacade;
             this.sqlGenerator = sqlGenerator;
         }
 
+        /// <inheritdoc />
         public virtual async Task<object> GetByIdAsync(string id)
         {
             SqlSelect sqlSelect = this.sqlGenerator.GetSqlSelect(id);
@@ -32,6 +44,7 @@ namespace Beztek.Facade.Cache
             return await Task.FromResult<object>(result).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
         public virtual async Task<int> UpdateAsync(string id, object value)
         {
             List<ISqlWrite> updateStatements = this.sqlGenerator.GetSqlUpdate(id, (T)value);
@@ -39,6 +52,7 @@ namespace Beztek.Facade.Cache
             return await Task.FromResult<int>(GetIsWritten(results)).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
         public virtual async Task<int> CreateAsync(string id, object value)
         {
             List<ISqlWrite> insertStatements = this.sqlGenerator.GetSqlInsert(id, (T)value);
@@ -46,6 +60,7 @@ namespace Beztek.Facade.Cache
             return await Task.FromResult<int>(GetIsWritten(results)).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
         public virtual async Task<int> DeleteAsync(string id)
         {
             List<ISqlWrite> deleteStatements = this.sqlGenerator.GetSqlDelete(id);
@@ -53,11 +68,13 @@ namespace Beztek.Facade.Cache
             return await Task.FromResult<int>(GetIsWritten(results)).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
         public virtual async Task<PagedResults<string>> SearchIdsByQueryAsync(SqlSelect query, int pageNum, int pageSize, bool retrieveTotalNumResults = false)
         {
             return await Task.FromResult(sqlFacade.GetPagedResults<string>(query, pageNum, pageSize, retrieveTotalNumResults)).ConfigureAwait(false);
         }
 
+        /// <inheritdoc />
         public virtual async Task<IDictionary<PersistenceAction, int>> BatchPersistAsync(List<PersistenceAction> persistenceActions, Dictionary<string, object> actionableItems)
         {
             List<ISqlWrite> allWrites = new List<ISqlWrite>();
@@ -105,10 +122,10 @@ namespace Beztek.Facade.Cache
         // Internal
 
         /// <summary>
-        /// Returns 1 if any of the batch writes wrote anything, or 0 otherwise
+        /// Returns 1 if any of the batch writes wrote anything, or 0 otherwise.
         /// </summary>
-        /// <param name="numBatchWrites"></param>
-        /// <returns></returns>
+        /// <param name="numBatchWrites">Per-statement row counts from <see cref="ISqlFacade.ExecuteMultiSqlWrite"/>.</param>
+        /// <returns>1 if any write affected rows; otherwise 0.</returns>
         private static int GetIsWritten(IEnumerable<int> numBatchWrites)
         {
             foreach (int currResult in numBatchWrites)

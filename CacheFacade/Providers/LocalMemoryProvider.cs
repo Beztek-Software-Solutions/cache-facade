@@ -8,7 +8,7 @@ namespace Beztek.Facade.Cache.Providers
     using System.Threading.Tasks;
 
     /// <summary>
-    /// Provides implementation for a Hazelcast based cache.
+    /// Provides implementation for an in-process local memory cache using <c>System.Runtime.Caching.MemoryCache</c>.
     /// </summary>
     internal class LocalMemoryProvider : ICacheProvider
     {
@@ -16,9 +16,9 @@ namespace Beztek.Facade.Cache.Providers
         private readonly CacheItemPolicy cacheItemPolicy;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="LocalMemoryProvider"/> class using MemoeryCache.
+        /// Initializes a new instance of the <see cref="LocalMemoryProvider"/> class.
         /// </summary>
-        /// <param name="localMemoryCacheConfiguration">LocalMemeory cache configuration object.</param>
+        /// <param name="localMemoryCacheConfiguration">Local memory cache configuration.</param>
         public LocalMemoryProvider(LocalMemoryProviderConfiguration localMemoryCacheConfiguration)
         {
             this.localMemoryCache = new System.Runtime.Caching.MemoryCache(localMemoryCacheConfiguration.CacheName);

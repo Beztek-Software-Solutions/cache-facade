@@ -3,35 +3,39 @@
 namespace Beztek.Facade.Cache.Providers
 {
     /// <summary>
-    /// Interface for cache provider which provides signatures for the basic operations needed by the implementaion of the Cache abstratcion.
-    /// </summary
+    /// Low-level cache provider used by the facade implementation (get/put/remove/clear).
+    /// Applications use <see cref="ICache"/>; providers are selected via configuration.
+    /// </summary>
     public interface ICacheProvider
     {
         /// <summary>
         /// Returns the value for the key, and null if it is not in the cache.
         /// </summary>
-        /// <param name="key">CacheProvider item key.</param>
-        /// <returns>CacheProvider item value corresponding to the key; null if it is not in the cache.</returns>
+        /// <typeparam name="T">Value type.</typeparam>
+        /// <param name="key">Cache item key.</param>
+        /// <returns>Value corresponding to the key; null if it is not in the cache.</returns>
         T Get<T>(string key);
 
         /// <summary>
-        /// Put the current value in the cache for the key, regardless of whether the cache already has a value for the key or not.
+        /// Puts the current value in the cache for the key, regardless of whether the cache already has a value for the key.
         /// </summary>
-        /// <param name="key">CacheProvider item key.</param>
-        /// <param name="value">CacheProvider item value.</param>
+        /// <typeparam name="T">Value type.</typeparam>
+        /// <param name="key">Cache item key.</param>
+        /// <param name="value">Cache item value.</param>
         void Put<T>(string key, T value);
 
         /// <summary>
         /// Removes the value and returns it if it exists, and null if it doesn't.
         /// </summary>
-        /// <param name="key">CacheProvider item key.</param>
+        /// <typeparam name="T">Value type.</typeparam>
+        /// <param name="key">Cache item key.</param>
         /// <returns>Old value corresponding to the cache item key; null if key does not exist.</returns>
         T Remove<T>(string key);
 
         /// <summary>
-        /// Clears the entire cached contents
+        /// Clears the entire cached contents.
         /// </summary>
-        /// <returns>Success or failure.</returns>
+        /// <returns><c>true</c> on success.</returns>
         bool Clear();
     }
 }

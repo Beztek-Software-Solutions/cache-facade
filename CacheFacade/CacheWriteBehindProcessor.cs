@@ -12,6 +12,11 @@ namespace Beztek.Facade.Cache
     using Beztek.Facade.Queue;
     using Microsoft.Extensions.Logging;
 
+    /// <summary>
+    /// Queue <see cref="IMessageProcessor"/> that drains <see cref="WriteBehindMessage"/> snapshots
+    /// into <see cref="IPersistenceService.BatchPersistAsync"/> without re-reading the live cache.
+    /// </summary>
+    /// <typeparam name="T">Entity type stored in the named cache.</typeparam>
     public class CacheWriteBehindProcessor<T> : IMessageProcessor
     {
         private static readonly bool SupportsWriteBehindEntity = typeof(IWriteBehindEntity).IsAssignableFrom(typeof(T));
@@ -20,11 +25,20 @@ namespace Beztek.Facade.Cache
         private readonly string cacheName;
         private Cache cache;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CacheWriteBehindProcessor{T}"/> class.
+        /// </summary>
+        /// <param name="cacheName">Cache name registered with <see cref="CacheFactory"/> (must match the write-behind cache).</param>
         public CacheWriteBehindProcessor(string cacheName)
         {
             this.cacheName = cacheName;
         }
 
+        /// <summary>
+        /// Processes a single queue message by delegating to the batch overload.
+        /// </summary>
+        /// <param name="message">Queue message whose payload is a <see cref="WriteBehindMessage"/>.</param>
+        /// <returns><c>true</c> when processing succeeds.</returns>
         public virtual async Task<bool> Process(Message message)
         {
             return (await this.Process(new List<Message> { message }).ConfigureAwait(false))[0];

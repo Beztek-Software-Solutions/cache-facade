@@ -7,9 +7,10 @@ namespace Beztek.Facade.Cache
     using Beztek.Facade.Sql;
 
     /// <summary>
-    /// SqlUtil interface for CRUD operations for a given entitry against a SQL database
+    /// Generates dialect-specific SQL for CRUD and upsert operations for entity type <typeparamref name="T"/>.
+    /// Used by <see cref="SqlPersistenceService{T}"/>.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="T">Entity type.</typeparam>
     public interface ISqlGenerator<in T>
     {
         /// <summary>

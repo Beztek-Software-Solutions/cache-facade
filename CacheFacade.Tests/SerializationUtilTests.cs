@@ -48,6 +48,17 @@ namespace Beztek.Facade.Cache.Tests
             Assert.That(serializedString, Is.EqualTo(stringifiedByte));
         }
 
+        [Test]
+        public void NullInputs_ReturnNullOrDefault()
+        {
+            Assert.That(SerializationUtil.Serialize(SerializationType.Json, null), Is.Null);
+            Assert.That(SerializationUtil.Deserialize<TestCacheable>(SerializationType.Json, null), Is.Null);
+            Assert.That(SerializationUtil.ByteToString(null), Is.Null);
+            Assert.That(SerializationUtil.StringToByte(null), Is.Null);
+            Assert.Throws<NotSupportedException>(() =>
+                SerializationUtil.Deserialize<TestCacheable>(SerializationType.None, Array.Empty<byte>()));
+        }
+
         // Utility method
 
         private static void TestSerialization(SerializationType serializationType)

@@ -17,6 +17,10 @@ namespace Beztek.Facade.Cache
     /// </summary>
     public interface IEtagEntity
     {
+        /// <summary>
+        /// Optimistic-concurrency / version token. Prefer <see cref="EtagUtil.GenerateEtag"/>
+        /// (short sequential UTC epoch-ms string) for both write-through and write-behind.
+        /// </summary>
         string Etag { get; set; }
     }
 }

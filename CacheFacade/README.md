@@ -1,27 +1,92 @@
 # Cache Facade library
 
 ## Introduction
-Caching facade library will serve as unified library for caching.
+
+`Beztek.Facade.Cache` is a unified caching facade for .NET. Services read and write objects through a single `ICache` API; the library can keep those objects in Redis or in-process memory, and optionally persist them with write-through or write-behind SQL.
 
 ## Details
 
-As part of implementation of micro-services, this library enables the services layer to use the cache as source of truth for data, without directly needingto go to the underlying persistence data layer. This library simplifies the cache implementation to the basic operations which can happen on a cache. Applications just need to read and write objects to the cache, and when configured for write-through or write-behind, the object gets saved in the back-end database. The cache exposes a search API using the Beztek.Facade.Sql library, that enables a powerful combination of using the cache with SQL queries.
+As part of micro-services, this library lets the services layer treat the cache as the source of truth without calling the persistence layer on every request. Applications use basic cache operations; when configured for write-through or write-behind, values are saved in the back-end database. Search uses the Beztek.Facade.Sql library so cache + SQL queries work together.
 
-Having a facade over of the caching operations help us to switch the cache providers without having need to change services code which use the cache. The facade can use the cache in one or more of the following ways:
-  - Non-Persistent
-  - Write Through - already built with back-end SQL support using the Beztek.Facade.Sql libary
-  - Write Behind - needs **Beztek.Facade.Queue ≥ 1.0.10** (LocalMemory, Azure Queue Storage, or AWS SQS). See [Write-behind cache](#write-behind-cache) below.
+A facade over caching operations lets you switch providers without changing service code. Modes:
 
-The back-end can be a distributed cache (Redis is the first implementation here), or a non-distributed cache. This library comes with a facade to a local memory cache for cases where a distributed cacheis not needed.
+- **Non-Persistent** — cache only
+- **Write Through** — synchronous SQL via Beztek.Facade.Sql
+- **Write Behind** — needs **Beztek.Facade.Queue ≥ 1.0.10** (LocalMemory, Azure Queue Storage, or AWS SQS). See [Write-behind cache](#write-behind-cache) below.
 
-A powerful way to use this library in development is to use local memory cache, along with a local memory queue, and a local memory/SQLite file SQL database for quick-and-dirty prototyping in a standalone setup.
+The back-end can be a distributed cache (Redis) or a non-distributed local memory cache. For local prototyping, combine local memory cache, a local memory queue, and SQLite.
 
-By using a distributed cache back-end such as Redis, this library can be invoked within a clustered micro-service which all share the same cache. - You get the performance of a cache, with the flexibility of a SQL database.
-- You get the simplicity of a NoSQL database with the powerful query capability of SQL.
+With Redis in a clustered micro-service you get cache performance with SQL query flexibility, and NoSQL-style key access with SQL search when needed.
+
+## Core API (`ICache`)
+
+| Method | Behavior |
+|--------|----------|
+| `GetAsync<T>` | Get by key; write-through/behind miss loads from persistence and fills the provider |
+| `PeekAsync<T>` | Provider-only get (no persistence load) |
+| `WarmAsync<T>` | Provider-only put (no DB write); use after batch SQL load |
+| `GetAndPutIfAbsentAsync<T>` | Insert if absent; otherwise return existing |
+| `GetAndReplaceAsync<T>` | Replace if present; etag check for `IEtagEntity` |
+| `GetAndPutAsync<T>` | Upsert into cache (+ persistence per mode) |
+| `RemoveAsync<T>` | Remove from cache (+ delete / enqueue per mode) |
+| `SearchByQueryAsync<T>` | Paged SQL id query + hydrate via `GetAsync` |
+| `FlushKeyAsync` / `FlushAsync` | Evict from provider only (write-behind snapshots still drain) |
+| `AcquireLock` | Named disposable lock (Redis RedLock or local reentrant lock) |
+
+Obtain instances only via `CacheFactory.GetOrCreateCache` / `GetCache`.
+
+## Initializing cache
+
+### Non-persistent (local memory)
+
+```csharp
+var providerConfig = new LocalMemoryProviderConfiguration("orders", timeToLiveMillis: 300_000);
+var cacheConfig = new CacheConfiguration(providerConfig, CacheType.NonPersistent);
+ICache cache = CacheFactory.GetOrCreateCache(cacheConfig, logger);
+```
+
+### Write-through (local memory + SQL)
+
+```csharp
+ISqlFacade sqlFacade = SqlFacadeFactory.GetSqlFacade(/* your SqlFacadeConfig */);
+IPersistenceService persistence = new SqlPersistenceService<MyEntity>(sqlFacade, new MySqlGenerator());
+
+var providerConfig = new LocalMemoryProviderConfiguration("orders", 300_000);
+var cacheConfig = new CacheConfiguration(providerConfig, CacheType.WriteThrough, persistence);
+ICache cache = CacheFactory.GetOrCreateCache(cacheConfig, logger);
+```
+
+### Write-behind (Redis + queue + SQL)
+
+```csharp
+var redisConfig = new RedisProviderConfiguration(
+    endpoint: "mycache.redis.cache.windows.net:6380",
+    password: redisPassword,
+    cacheName: "orders",
+    useSSL: true);
+
+IPersistenceService persistence = new SqlPersistenceService<MyEntity>(sqlFacade, new MySqlGenerator());
+IQueueClient queueClient = QueueClientFactory.GetQueueClient(queueProviderConfig, logger);
+var processor = new CacheWriteBehindProcessor<MyEntity>("orders");
+var queueConfig = new QueueConfiguration(queueClient, processor, cancellationToken);
+
+var cacheConfig = new CacheConfiguration(redisConfig, CacheType.WriteBehind, persistence, queueConfig);
+ICache cache = CacheFactory.GetOrCreateCache(cacheConfig, logger);
+```
+
+Look up an existing instance: `CacheFactory.GetCache("orders")`.
+
+### Providers
+
+| Provider | Configuration type | Status |
+|----------|-------------------|--------|
+| Redis | `RedisProviderConfiguration` | Implemented |
+| Local memory | `LocalMemoryProviderConfiguration` | Implemented |
+| Hazelcast | — | Enum placeholder only |
 
 ## Write-behind cache
 
-Write-behind is modeled on the same last-write-wins outbox pattern used in production OpenSearch CDC sync: every change enqueues **intent + value snapshot + order stamp**, and the drain applies without re-reading the live cache. That keeps persistence correct if the key is flushed or evicted before the queue is drained.
+Write-behind is modeled in this way: every change enqueues **intent + value snapshot + order stamp**, and the drain applies without re-reading the live cache. That keeps persistence correct if the key is flushed or evicted before the queue is drained.
 
 ### Flow
 
@@ -52,9 +117,11 @@ CacheWriteBehindProcessor
 
 The legacy key-only message is obsolete: inferring create/update/delete from live cache+DB fails after `FlushKeyAsync` / `FlushAsync`.
 
-### Entity contract for robust write-behind
+### Entity contract
 
-For cross-batch shuffle and redelivery safety (especially create vs delete), entities should implement **`IWriteBehindEntity`**:
+**`IEtagEntity` is sufficient** for non-persistent and write-through caches (sequential `Etag` only).
+
+**Write-behind** additionally needs soft delete: implement **`IWriteBehindEntity`** (extends `IEtagEntity` with `IsDeleted`) so cross-batch create/delete races stay safe under redelivery.
 
 ```csharp
 public interface IWriteBehindEntity : IEtagEntity
@@ -64,16 +131,21 @@ public interface IWriteBehindEntity : IEtagEntity
 }
 ```
 
-**Two persisted concerns, one reused column:**
+**Schema:**
 
-| Concern | Storage | Notes |
-|---------|---------|--------|
-| Order / version clock | Existing **`etag`** column | **Always** a short sequential string via `EtagUtil.GenerateEtag()` (UTC epoch ms, ~13 characters)—same for write-through and write-behind. Used for API optimistic concurrency **and** (on write-behind) drain last-write-wins (`EtagUtil.ParseSequentialEtag`). |
-| Soft-delete tombstone | **`is_deleted`** (bool) column | Delete keeps the row, sets `IsDeleted = true`, and advances `Etag`. A newer create/update clears `IsDeleted` (undelete). Write-behind only. |
+| Mode | Columns |
+|------|---------|
+| Non-persistent / write-through (`IEtagEntity`) | **`etag`** only (sequential string). Hard delete removes the row; no soft-delete column. |
+| Write-behind (`IWriteBehindEntity`) | **`etag`** plus **`is_deleted`** (bool). Soft-delete tombstone keeps the version clock after delete. |
+
+| Concern | Storage | When needed | Notes |
+|---------|---------|-------------|--------|
+| Order / version clock | **`etag`** | All modes that use optimistic concurrency or write-behind drain ordering | Short sequential string via `EtagUtil.GenerateEtag()` (UTC epoch ms, ~13 characters). Same format for write-through and write-behind. Used for API concurrency **and** (on write-behind) last-write-wins (`EtagUtil.ParseSequentialEtag`). |
+| Soft-delete tombstone | **`is_deleted`** (bool) | **Write-behind only** | Delete keeps the row, sets `IsDeleted = true`, and advances `Etag`. A newer create/update clears `IsDeleted` (undelete). Not required for write-through. |
 
 There is **no** separate `write_behind_sequence` column: the sequential etag *is* the version. Using the same etag format in both cache modes makes switching write-through ↔ write-behind less painful.
 
-`GetByIdAsync` (and anything that hydrates the cache) must treat `IsDeleted == true` as **missing** (`null`) so callers never see tombstones.
+On write-behind, `GetByIdAsync` (and anything that hydrates the cache) must treat `IsDeleted == true` as **missing** (`null`) so callers never see tombstones.
 
 ### Why soft delete
 
@@ -97,11 +169,12 @@ Upsert SQL should be version-gated, e.g. only apply when the incoming sequential
 
 ### Consumer checklist
 
-1. **Queue:** `Beztek.Facade.Queue` ≥ 1.0.10; register processor for `WriteBehindMessage` (not `string`). Configure `QueueConfiguration.MaxProcessingAttempts` (default 5). On max failures or `false`, messages land on the poison queue — use `PeekUnprocessedMessagesAsync` / `RequeueUnprocessedMessagesAsync` to inspect or retry.
-2. **SQL:** implement `ISqlGenerator.GetSqlUpsert` (dialect-specific insert-or-update). Write-behind create/update drain through upsert; write-through may keep distinct insert/update.
-3. **Schema (write-behind entities):** keep `etag` (store sequential strings); add `is_deleted` (bool). Filter deleted rows in reads.
-4. **Entity:** implement `IWriteBehindEntity` (`Etag` + `IsDeleted`).
-5. **Etag generation:** always use `EtagUtil.GenerateEtag()` (sequential epoch-ms string)—not `Guid.NewGuid()`.
+Assumes write-through is already in place (`IEtagEntity`, sequential `etag`, insert/update/delete SQL). Below is **only the write-behind delta**:
+
+1. **SQL:** implement `ISqlGenerator.GetSqlUpsert` (dialect-specific, preferably version-gated on sequential etag). Write-behind create/update drain through upsert.
+2. **Schema:** add **`is_deleted`** (bool); filter deleted rows in reads.
+3. **Entity:** implement **`IWriteBehindEntity`** (`IsDeleted` for soft delete).
+4. **Queue:** `Beztek.Facade.Queue` ≥ 1.0.10; register processor for `WriteBehindMessage` (not `string`). Configure `QueueConfiguration.MaxProcessingAttempts` (default 5). On max failures or `false`, messages land on the poison queue — use `PeekUnprocessedMessagesAsync` / `RequeueUnprocessedMessagesAsync` to inspect or retry.
 
 ### Write-through
 
@@ -109,7 +182,7 @@ Write-through remains synchronous create/update/delete with strict insert vs upd
 
 ## Entity types: recommendations, fallbacks, and compromises
 
-The library supports more than one entity shape. **Etag format is shared**; soft delete is the main write-behind-specific requirement.
+The library supports more than one entity shape. **`IEtagEntity` is sufficient unless you use write-behind**, which then needs soft delete via **`IWriteBehindEntity`**. Etag format is shared across modes.
 
 ### Sequential etag (all modes)
 
@@ -182,32 +255,14 @@ Need write-behind?
 - **Recommended:** `IEtagEntity` for write-through; `IWriteBehindEntity` (+ `is_deleted`) for write-behind.
 - **Fallbacks** allow incremental migration; skipping soft delete trades cross-batch create/delete correctness for schema simplicity.
 
+## Related helpers
 
-In the initial version, caching library has implementation for following operations -
+| Type | Role |
+|------|------|
+| `EtagUtil` | Sequential etag generation / parse |
+| `EtagEntityUpdateHelper` | Retrying optimistic updates on `ConcurrencyException` |
+| `SqlPersistenceService<T>` | Default SQL `IPersistenceService` |
+| `ISqlGenerator<T>` | Dialect-specific insert/update/delete/upsert SQL |
+| `CacheWriteBehindProcessor<T>` | Queue drain for `WriteBehindMessage` |
 
-```csharp
-// Returns the value for the key, and null if it is not in the cache.
-Task<T> GetAsync<T>(string key);
-
-// If the cache does not have the key, put the value for the key and return null, otherwise just return the old value and do not overwrite.
-Task<T> GetAndPutIfAbsentAsync<T>(string key, T value);
-
-// Replaces the entry for a key only if currently mapped to some value. Does nothing and returns null if it does not exist, and returns the old value if it exists.
-Task<T> GetAndReplaceAsync<T>(string key, T value);
-
-// If the cache has the key, replace the value for the key and return the old value, otherwise put the value corresponding to the key and return null.
-Task<T> GetAndPutAsync<T>(string key, T value);
-
-// Removes the value and returns it if it exists, and null if it doesn't.
-Task<T> RemoveAsync<T>(string key);
-```
-
-Caching library has following cache providers implemented for the initial version -
-1. Redis
-2. Local Memory
-
-THe Caching library is a facade to a back-end CacheProvider which can be used to initialize cache. Depending on which cache provider the application/service needs to use, the respective cache configuration object needs to be passed to the CacheProvider.
-
-## Initializing cache
-
-Instantiate a CacheProvider using the appropriate provider's configuration.
+XML documentation is included in the NuGet package (`GenerateDocumentationFile`).
