@@ -5,7 +5,9 @@ namespace Beztek.Facade.Cache
     using System;
 
     /// <summary>
-    /// Acquires a named disposable lock (Redis RedLock or local reentrant lock).
+    /// Acquires a named disposable lock (Redis RedLock for distributed caches, or an in-process
+    /// reentrant lock backed by a <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}"/>
+    /// for single-instance local-memory caches).
     /// </summary>
     public interface IDistributedLock
     {

@@ -16,9 +16,7 @@ namespace Beztek.Facade.Cache.Tests
         [SetUp]
         public void SetUp()
         {
-            ICacheProviderConfiguration lockProviderConfiguration = new LocalMemoryProviderConfiguration("lockCache", 300000);
-            ICache lockCache = CacheFactory.GetOrCreateCache(new CacheConfiguration(lockProviderConfiguration, CacheType.NonPersistent));
-            testLock = new DisposableLock(lockCache, "lockCache");
+            this.testLock = new DisposableLock();
         }
 
         [Test]
@@ -39,7 +37,7 @@ namespace Beztek.Facade.Cache.Tests
                     // Wait for lock to expire
                     Thread.Sleep(301);
                     // Lock has expired
-                    IDisposable lock2 = this.testLock.AcquireLock("test1Lock", 50, 300, 1);
+                    using IDisposable lock2 = this.testLock.AcquireLock("test1Lock", 50, 300, 1);
                     Assert.That(lock2, Is.Not.Null);
                 }).Wait();
             }
@@ -51,8 +49,8 @@ namespace Beztek.Facade.Cache.Tests
             using (IDisposable lock1 = this.testLock.AcquireLock("test2Lock", 50, 300, 1))
             {
                 Task.Run(() => {
-                    // Lock should expire by timeeout
-                    IDisposable lock2 = this.testLock.AcquireLock("test2Lock", 301, 300, 1);
+                    // Lock should expire by timeout
+                    using IDisposable lock2 = this.testLock.AcquireLock("test2Lock", 301, 300, 1);
                     Assert.That(lock2, Is.Not.Null);
                 }).Wait();
             }
@@ -62,13 +60,10 @@ namespace Beztek.Facade.Cache.Tests
         public void TimeeoutTest()
         {
             using (IDisposable lock1 = this.testLock.AcquireLock("test3Lock", 50, 300, 1))
-                Assert.Throws<AggregateException>(() => {
-                    Task.Run(() => {
-                        // Try to acquire the lock from a different thread. Should timeout
-                        IDisposable lock2 = this.testLock.AcquireLock("test3Lock", 5, 100, 1);
-                        Assert.That(lock2, Is.Not.Null);
-                    }).Wait();
-                });
+            {
+                Assert.Throws<TimeoutException>(() =>
+                    Task.Run(() => this.testLock.AcquireLock("test3Lock", 5, 100, 1)).GetAwaiter().GetResult());
+            }
         }
 
         [Test]
@@ -108,8 +103,100 @@ namespace Beztek.Facade.Cache.Tests
             using (IDisposable lock1 = this.testLock.AcquireLock("test6Lock", 50, 300, 1))
             {
                 Assert.That(lock1, Is.Not.Null);
-                IDisposable lock2 = this.testLock.AcquireLock("test6Lock", 50, 300, 1);
+                using IDisposable lock2 = this.testLock.AcquireLock("test6Lock", 50, 300, 1);
+                Assert.That(lock2, Is.Not.Null);
             }
+        }
+
+        [Test]
+        public void ReentrantAcquireRenewsExpiry()
+        {
+            using (IDisposable outer = this.testLock.AcquireLock("renewLock", 50, 300, 1))
+            {
+                Thread.Sleep(200);
+                using (IDisposable inner = this.testLock.AcquireLock("renewLock", 50, 300, 1))
+                {
+                    Assert.That(inner, Is.Not.Null);
+                }
+
+                bool acquiredByOtherThread = false;
+                Task.Run(() => {
+                    Thread.Sleep(150);
+                    try
+                    {
+                        this.testLock.AcquireLock("renewLock", 5, 100, 1);
+                        acquiredByOtherThread = true;
+                    }
+                    catch (TimeoutException)
+                    {
+                    }
+                }).Wait();
+
+                Assert.That(acquiredByOtherThread, Is.False);
+            }
+        }
+
+        [Test]
+        public void WrongThreadDisposeDoesNotReleaseLock()
+        {
+            using (IDisposable owner = this.testLock.AcquireLock("ownerLock", 50, 300, 1))
+            {
+                Task.Run(() => owner.Dispose()).Wait();
+
+                Assert.Throws<TimeoutException>(() =>
+                    Task.Run(() => this.testLock.AcquireLock("ownerLock", 5, 100, 1)).GetAwaiter().GetResult());
+            }
+        }
+
+        [Test]
+        public void ConcurrentAcquireOnlyOneHolderAtATime()
+        {
+            int currentHolders = 0;
+            int maxConcurrentHolders = 0;
+            object tallyGate = new object();
+            using ManualResetEventSlim startGate = new ManualResetEventSlim(false);
+
+            Task task1 = Task.Run(() => {
+                startGate.Wait();
+                using (this.testLock.AcquireLock("contendedLock", 1000, 500, 1))
+                {
+                    lock (tallyGate)
+                    {
+                        currentHolders++;
+                        maxConcurrentHolders = Math.Max(maxConcurrentHolders, currentHolders);
+                    }
+
+                    Thread.Sleep(100);
+
+                    lock (tallyGate)
+                    {
+                        currentHolders--;
+                    }
+                }
+            });
+
+            Task task2 = Task.Run(() => {
+                startGate.Wait();
+                using (this.testLock.AcquireLock("contendedLock", 1000, 500, 1))
+                {
+                    lock (tallyGate)
+                    {
+                        currentHolders++;
+                        maxConcurrentHolders = Math.Max(maxConcurrentHolders, currentHolders);
+                    }
+
+                    Thread.Sleep(100);
+
+                    lock (tallyGate)
+                    {
+                        currentHolders--;
+                    }
+                }
+            });
+
+            startGate.Set();
+            Task.WaitAll(task1, task2);
+            Assert.That(maxConcurrentHolders, Is.EqualTo(1));
         }
     }
 }

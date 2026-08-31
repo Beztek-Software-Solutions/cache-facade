@@ -47,7 +47,6 @@ namespace Beztek.Facade.Cache
         {
             this.Logger = logger;
 
-            ICacheProviderConfiguration lockProviderConfiguration = null;
             switch (cacheConfiguration.CacheProviderConfiguration)
             {
                 // Cache Provider
@@ -63,22 +62,17 @@ namespace Beztek.Facade.Cache
                     break;
                 case LocalMemoryProviderConfiguration localMemoryProviderConfiguration:
                     this.CacheProvider = new LocalMemoryProvider(localMemoryProviderConfiguration);
-                    lockProviderConfiguration = new LocalMemoryProviderConfiguration(LockCacheName, LockTimeToLiveMillis);
                     break;
                 default:
                     // This is useful for unit tests, and only unit tests can reach here
-                    lockProviderConfiguration = new LocalMemoryProviderConfiguration(LockCacheName, LockTimeToLiveMillis);
                     break;
             }
 
-            // Lock cache
-            if (!string.Equals(LockCacheName, cacheConfiguration.CacheProviderConfiguration.CacheName, StringComparison.Ordinal))
+            // In-process lock for local-memory caches (not used when the cache itself is the lock registry).
+            if (this.CacheProvider is LocalMemoryProvider
+                && !string.Equals(LockCacheName, cacheConfiguration.CacheProviderConfiguration.CacheName, StringComparison.Ordinal))
             {
-                if (lockProviderConfiguration != null)
-                {
-                    ICache lockCache = CacheFactory.GetOrCreateCache(new CacheConfiguration(lockProviderConfiguration, CacheType.NonPersistent));
-                    this.DistributedLock = new DisposableLock(lockCache, LockCacheName);
-                }
+                this.DistributedLock = new DisposableLock();
             }
 
             // Cache Type

@@ -3,90 +3,156 @@
 namespace Beztek.Facade.Cache
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Threading;
 
+    /// <summary>
+    /// In-process reentrant lock for single-instance local-memory caches.
+    /// Lock state is held in a static <see cref="ConcurrentDictionary{TKey,TValue}"/> keyed by lock name.
+    /// </summary>
     internal class DisposableLock : IDisposable, IDistributedLock
     {
-        private readonly ICache lockCache;
-        private readonly string name;
+        private static readonly ConcurrentDictionary<string, LockState> Locks =
+            new ConcurrentDictionary<string, LockState>(StringComparer.Ordinal);
 
-        internal DisposableLock(ICache lockCache, string name)
+        private readonly string lockName;
+        private readonly int ownerThreadId;
+        private bool disposed;
+
+        /// <summary>Factory entry point used by <see cref="Cache"/> (not an acquired handle).</summary>
+        internal DisposableLock()
         {
-            this.lockCache = lockCache;
-            this.name = name;
+            this.lockName = null;
+            this.ownerThreadId = -1;
+        }
+
+        private DisposableLock(string lockName, int ownerThreadId)
+        {
+            this.lockName = lockName;
+            this.ownerThreadId = ownerThreadId;
         }
 
         public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
         {
-            long numAttempts = ((timeoutMillis - 1) / retryIntervalMillis) + 1;
-            for (long attempt = 0; attempt < numAttempts; attempt++)
+            if (string.IsNullOrEmpty(lockName))
             {
-                // Check if the lock has been released or if it has expired
-                long[] lockData = this.lockCache.GetAsync<long[]>(lockName).Result;
-                bool isReleasedOrExpired = false;
-                bool isDifferentThread = true;
-                if (lockData == null)
-                {
-                    isReleasedOrExpired = true;
-                }
-                else
-                {
-                    long expiryTimeMillis = lockData[0];
-                    long threadId = lockData[1];
-                    isDifferentThread = threadId != Thread.CurrentThread.ManagedThreadId;
-                    long currTimeMillis = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-                    isReleasedOrExpired = isDifferentThread && currTimeMillis >= expiryTimeMillis;
-                }
-
-                // If there is a lock that is fathered by the same thread, return
-                if (lockData != null && !isDifferentThread)
-                {
-                    lockData[2] = lockData[2] + 1;
-                    this.lockCache.GetAndPutAsync<long[]>(lockName, lockData).Wait();
-                    return new DisposableLock(this.lockCache, lockName);
-                }
-                else if (isReleasedOrExpired)
-                {
-                    // Create one and return
-                    long currTimeMillis = DateTimeOffset.Now.ToUnixTimeMilliseconds();
-                    long expiryTimeMillis = currTimeMillis + lockTimeMillis;
-                    lockData = new long[] { expiryTimeMillis, Thread.CurrentThread.ManagedThreadId, 1 };
-                    this.lockCache.GetAndPutAsync<long[]>(lockName, lockData).Wait();
-                    return new DisposableLock(this.lockCache, lockName);
-                }
-
-                // Could not acquire lock, so sleep and try again in the next iteration
-                Thread.Sleep(retryIntervalMillis);
+                throw new ArgumentException("Lock name is required.", nameof(lockName));
             }
 
-            // Could not acquire the lock within the timeout, so throw an exception
+            if (timeoutMillis < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(timeoutMillis));
+            }
+
+            if (lockTimeMillis <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(lockTimeMillis));
+            }
+
+            if (retryIntervalMillis <= 0)
+            {
+                retryIntervalMillis = 1;
+            }
+
+            int currentThreadId = Environment.CurrentManagedThreadId;
+            LockState state = Locks.GetOrAdd(lockName, _ => new LockState());
+            long deadlineMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + timeoutMillis;
+
+            lock (state.Sync)
+            {
+                while (true)
+                {
+                    long nowMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    if (TryAcquireLocked(state, currentThreadId, nowMillis, lockTimeMillis))
+                    {
+                        return new DisposableLock(lockName, currentThreadId);
+                    }
+
+                    long remainingMillis = deadlineMillis - nowMillis;
+                    if (remainingMillis <= 0)
+                    {
+                        break;
+                    }
+
+                    int waitMillis = (int)Math.Min(remainingMillis, retryIntervalMillis);
+                    Monitor.Wait(state.Sync, waitMillis);
+                }
+            }
+
             throw new TimeoutException($"Unable to acquire lock: {lockName}");
         }
 
         public void Dispose()
         {
-            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-            this.Dispose(true);
-            System.GC.SuppressFinalize(this);
+            if (this.disposed || this.lockName == null)
+            {
+                return;
+            }
+
+            if (Environment.CurrentManagedThreadId != this.ownerThreadId)
+            {
+                return;
+            }
+
+            this.disposed = true;
+            this.Release();
+            GC.SuppressFinalize(this);
         }
 
-        // Protected
-
-        protected virtual void Dispose(bool disposing)
+        private static bool TryAcquireLocked(LockState state, int currentThreadId, long nowMillis, long lockTimeMillis)
         {
-            long[] lockData = this.lockCache.GetAsync<long[]>(this.name).Result;
-            if (lockData != null)
+            if (state.RefCount == 0 || nowMillis >= state.ExpiryTimeMillis)
             {
-                if (lockData[2] > 1)
-                {
-                    lockData[2] = lockData[2] - 1;
-                    this.lockCache.GetAndPutAsync<long[]>(this.name, lockData).Wait();
-                }
-                else
-                {
-                    this.lockCache.RemoveAsync<long[]>(this.name).Wait();
-                }
+                state.OwnerThreadId = currentThreadId;
+                state.RefCount = 1;
+                state.ExpiryTimeMillis = nowMillis + lockTimeMillis;
+                return true;
             }
+
+            if (state.OwnerThreadId == currentThreadId)
+            {
+                state.RefCount++;
+                state.ExpiryTimeMillis = nowMillis + lockTimeMillis;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void Release()
+        {
+            if (!Locks.TryGetValue(this.lockName, out LockState state))
+            {
+                return;
+            }
+
+            lock (state.Sync)
+            {
+                if (state.RefCount == 0 || state.OwnerThreadId != this.ownerThreadId)
+                {
+                    return;
+                }
+
+                state.RefCount--;
+                if (state.RefCount == 0)
+                {
+                    state.OwnerThreadId = 0;
+                    state.ExpiryTimeMillis = 0;
+                }
+
+                Monitor.PulseAll(state.Sync);
+            }
+        }
+
+        private sealed class LockState
+        {
+            internal readonly object Sync = new object();
+
+            internal int OwnerThreadId { get; set; }
+
+            internal int RefCount { get; set; }
+
+            internal long ExpiryTimeMillis { get; set; }
         }
     }
 }
