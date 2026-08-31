@@ -9,6 +9,7 @@ namespace Beztek.Facade.Cache
     /// <summary>
     /// In-process reentrant lock for single-instance local-memory caches.
     /// Lock state is held in a static <see cref="ConcurrentDictionary{TKey,TValue}"/> keyed by lock name.
+    /// Dispose is thread-agnostic so <c>await</c> / <c>ConfigureAwait(false)</c> resumptions still release.
     /// </summary>
     internal class DisposableLock : IDisposable, IDistributedLock
     {
@@ -16,20 +17,17 @@ namespace Beztek.Facade.Cache
             new ConcurrentDictionary<string, LockState>(StringComparer.Ordinal);
 
         private readonly string lockName;
-        private readonly int ownerThreadId;
-        private bool disposed;
+        private int disposed;
 
         /// <summary>Factory entry point used by <see cref="Cache"/> (not an acquired handle).</summary>
         internal DisposableLock()
         {
             this.lockName = null;
-            this.ownerThreadId = -1;
         }
 
-        private DisposableLock(string lockName, int ownerThreadId)
+        private DisposableLock(string lockName)
         {
             this.lockName = lockName;
-            this.ownerThreadId = ownerThreadId;
         }
 
         public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
@@ -65,7 +63,7 @@ namespace Beztek.Facade.Cache
                     long nowMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     if (TryAcquireLocked(state, currentThreadId, nowMillis, lockTimeMillis))
                     {
-                        return new DisposableLock(lockName, currentThreadId);
+                        return new DisposableLock(lockName);
                     }
 
                     long remainingMillis = deadlineMillis - nowMillis;
@@ -84,17 +82,11 @@ namespace Beztek.Facade.Cache
 
         public void Dispose()
         {
-            if (this.disposed || this.lockName == null)
+            if (this.lockName == null || Interlocked.Exchange(ref this.disposed, 1) != 0)
             {
                 return;
             }
 
-            if (Environment.CurrentManagedThreadId != this.ownerThreadId)
-            {
-                return;
-            }
-
-            this.disposed = true;
             this.Release();
             GC.SuppressFinalize(this);
         }
@@ -128,7 +120,7 @@ namespace Beztek.Facade.Cache
 
             lock (state.Sync)
             {
-                if (state.RefCount == 0 || state.OwnerThreadId != this.ownerThreadId)
+                if (state.RefCount == 0)
                 {
                     return;
                 }

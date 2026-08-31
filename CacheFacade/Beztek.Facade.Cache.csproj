@@ -4,14 +4,14 @@
 	  <TargetFramework>net9.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <id>Beztek.Facade.Cache</id>
-    <version>1.6.1</version>
+    <version>1.6.2</version>
     <authors>Peter Thomas</authors>
     <owners>Beztek Software Solutions</owners>
     <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Beztek-Software-Solutions/cache-facade</projectUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>API facade over various distributed and non-distributed caches</description>
-    <releaseNotes>EtagEntityUpdateHelper: configurable retries/backoff (defaults 5 retries, exponential 5–200ms)</releaseNotes>
+    <releaseNotes>DisposableLock: allow dispose after await/ConfigureAwait(false) (fix owner-thread check that leaked locks on LocalMemory).</releaseNotes>
     <copyright>Copyright 2023, Beztek Software Solutions</copyright>
     <tags>Beztek.Facade.Cache;cache-facade;CacheFacade</tags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>

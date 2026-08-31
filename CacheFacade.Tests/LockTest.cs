@@ -137,15 +137,26 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
-        public void WrongThreadDisposeDoesNotReleaseLock()
+        public void DisposeFromDifferentThreadStillReleases()
         {
-            using (IDisposable owner = this.testLock.AcquireLock("ownerLock", 50, 300, 1))
-            {
-                Task.Run(() => owner.Dispose()).Wait();
+            // Mirrors Cache async paths: acquire on thread A, await ConfigureAwait(false), dispose on thread B.
+            IDisposable owner = this.testLock.AcquireLock("asyncDisposeLock", 50, 3000, 1);
+            Task.Run(() => owner.Dispose()).Wait();
 
-                Assert.Throws<TimeoutException>(() =>
-                    Task.Run(() => this.testLock.AcquireLock("ownerLock", 5, 100, 1)).GetAwaiter().GetResult());
+            using IDisposable next = this.testLock.AcquireLock("asyncDisposeLock", 50, 300, 1);
+            Assert.That(next, Is.Not.Null);
+        }
+
+        [Test]
+        public async Task DisposeAfterAwaitConfigureAwaitFalse_Releases()
+        {
+            using (this.testLock.AcquireLock("awaitDisposeLock", 50, 3000, 1))
+            {
+                await Task.Delay(10).ConfigureAwait(false);
             }
+
+            using IDisposable next = this.testLock.AcquireLock("awaitDisposeLock", 50, 300, 1);
+            Assert.That(next, Is.Not.Null);
         }
 
         [Test]
