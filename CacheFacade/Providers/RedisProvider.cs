@@ -110,13 +110,29 @@ namespace Beztek.Facade.Cache.Providers
                 return false;
             }
 
-            // Flush only this logical DB — never FlushAllDatabases (would wipe every DB on the server).
+            // FLUSHDB is server-scoped: flush every connected primary. Skipping replicas avoids
+            // READONLY failures (Redis/Valkey/Dragonfly/KeyDB/Garnet share this path).
             ConnectionMultiplexer redis = lazy.Value;
+            int flushed = 0;
             foreach (var endpoint in redis.GetEndPoints())
             {
                 IServer server = redis.GetServer(endpoint);
+                if (!server.IsConnected || server.IsReplica)
+                {
+                    continue;
+                }
+
                 server.FlushDatabase(this.databaseIndex);
+                flushed++;
             }
+
+            if (flushed > 0)
+            {
+                return true;
+            }
+
+            // Standalone / single-node fallback when topology has not advertised a usable primary yet.
+            this.cacheDatabase.Execute("FLUSHDB");
             return true;
         }
 

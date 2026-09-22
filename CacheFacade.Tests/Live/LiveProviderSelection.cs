@@ -28,6 +28,7 @@ namespace Beztek.Facade.Cache.Tests.Live
             CacheProviderType.Redis,
             CacheProviderType.Dragonfly,
             CacheProviderType.KeyDB,
+            CacheProviderType.Valkey,
             CacheProviderType.Garnet,
             CacheProviderType.Memcached,
             CacheProviderType.Hazelcast,
@@ -56,7 +57,7 @@ namespace Beztek.Facade.Cache.Tests.Live
                 else
                     throw new ArgumentException(
                         $"Unknown provider '{token}' in {EnvVar}. " +
-                        "Use: all | localmemory | redis | dragonfly | keydb | garnet | memcached | hazelcast " +
+                        "Use: all | localmemory | redis | dragonfly | keydb | valkey | garnet | memcached | hazelcast " +
                         "(comma-separated for a subset).");
             }
 
@@ -82,6 +83,10 @@ namespace Beztek.Facade.Cache.Tests.Live
                 case "keydb":
                 case "key":
                     provider = CacheProviderType.KeyDB;
+                    return true;
+                case "valkey":
+                case "vk":
+                    provider = CacheProviderType.Valkey;
                     return true;
                 case "garnet":
                     provider = CacheProviderType.Garnet;

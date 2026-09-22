@@ -57,7 +57,7 @@ namespace Beztek.Facade.Cache
 
             switch (cacheConfiguration.CacheProviderConfiguration)
             {
-                // Cache Provider (Dragonfly/KeyDB/Garnet inherit RedisProviderConfiguration)
+                // Cache Provider (Dragonfly/KeyDB/Valkey/Garnet inherit RedisProviderConfiguration)
                 case RedisProviderConfiguration redisConfiguration:
                     var redisProvider = new RedisProvider(redisConfiguration);
                     this.CacheProvider = redisProvider;

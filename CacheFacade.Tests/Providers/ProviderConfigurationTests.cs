@@ -53,6 +53,17 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
+        public void CanInitializeValkeyProviderConfiguration()
+        {
+            var config = new ValkeyProviderConfiguration("127.0.0.1:6379", "", "orders", useSSL: false, timeToLiveMillis: 300000);
+            Assert.That(config.ProviderType, Is.EqualTo(CacheProviderType.Valkey));
+            Assert.That(config.Endpoint, Is.EqualTo("127.0.0.1:6379"));
+            Assert.That(config.CacheName, Is.EqualTo("orders"));
+            Assert.That(config, Is.InstanceOf<RedisProviderConfiguration>());
+            Assert.That(config.DistributedLockKind, Is.EqualTo(RedisDistributedLockKind.RedLock));
+        }
+
+        [Test]
         public void CanInitializeGarnetProviderConfiguration()
         {
             var config = new GarnetProviderConfiguration("127.0.0.1:6379", "", "orders", useSSL: false, timeToLiveMillis: 300000);

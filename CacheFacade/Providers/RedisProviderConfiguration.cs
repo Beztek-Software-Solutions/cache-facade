@@ -16,7 +16,7 @@ namespace Beztek.Facade.Cache
         /// <param name="useSSL">Whether to use SSL/TLS for the Redis connection.</param>
         /// <param name="abortConnection">Whether to abort on connect failure (StackExchange.Redis <c>AbortOnConnectFail</c>).</param>
         /// <param name="timeToLiveMillis">TTL for cached entries in milliseconds (default 1 hour).</param>
-        /// <param name="nameIndex">Redis database index (default 0). The internal lock cache uses index 1 when applicable.</param>
+        /// <param name="nameIndex">Redis database index (default 0).</param>
         public RedisProviderConfiguration(string endpoint, string password, string cacheName, bool useSSL = true, bool abortConnection = false, long timeToLiveMillis = 3600000, int nameIndex = 0)
         {
             this.CacheName = cacheName;

@@ -123,6 +123,27 @@ namespace Beztek.Facade.Cache.Tests.Live
         }
 
         [Test]
+        public async Task FlushAsync_ClearsProviderContents()
+        {
+            // Memcached has no scoped Clear — skip full flush.
+            if (_providerType == CacheProviderType.Memcached)
+            {
+                Assert.Ignore("Memcached Clear is not supported; use FlushKeyAsync / FlushAsync(keys).");
+            }
+
+            ICache cache = _host.Cache;
+            string key = "flush-" + Guid.NewGuid().ToString("N");
+            var value = new TestCacheable(key, "to-clear");
+
+            await cache.GetAndPutAsync(key, value).ConfigureAwait(false);
+            Assert.That(await cache.GetAsync<TestCacheable>(key).ConfigureAwait(false), Is.EqualTo(value));
+
+            bool cleared = await cache.FlushAsync<TestCacheable>().ConfigureAwait(false);
+            Assert.That(cleared, Is.True);
+            Assert.That(await cache.GetAsync<TestCacheable>(key).ConfigureAwait(false), Is.Null);
+        }
+
+        [Test]
         public void ConcurrentLock_OnlyOneHolder()
         {
             ICache cache = _host.Cache;

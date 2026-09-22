@@ -54,10 +54,11 @@ namespace Beztek.Facade.Cache.Tests.Live
             Assert.That(providers, Does.Contain(CacheProviderType.Redis));
             Assert.That(providers, Does.Contain(CacheProviderType.Dragonfly));
             Assert.That(providers, Does.Contain(CacheProviderType.KeyDB));
+            Assert.That(providers, Does.Contain(CacheProviderType.Valkey));
             Assert.That(providers, Does.Contain(CacheProviderType.Garnet));
             Assert.That(providers, Does.Contain(CacheProviderType.Memcached));
             Assert.That(providers, Does.Contain(CacheProviderType.Hazelcast));
-            Assert.That(providers.Count, Is.EqualTo(7));
+            Assert.That(providers.Count, Is.EqualTo(8));
         }
 
         [Test]

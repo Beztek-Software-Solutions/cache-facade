@@ -2,7 +2,7 @@
 
 ## Introduction
 
-`Beztek.Facade.Cache` is a unified caching facade for .NET. Services read and write objects through a single `ICache` API; the library can keep those objects in Redis, Dragonfly, KeyDB, Garnet, Hazelcast, Memcached, or in-process memory, and optionally persist them with write-through or write-behind SQL.
+`Beztek.Facade.Cache` is a unified caching facade for .NET. Services read and write objects through a single `ICache` API; the library can keep those objects in Redis, Dragonfly, KeyDB, Valkey, Garnet, Hazelcast, Memcached, or in-process memory, and optionally persist them with write-through or write-behind SQL.
 
 ## Details
 
@@ -95,6 +95,7 @@ var cacheConfig = new CacheConfiguration(redisConfig, CacheType.WriteThrough, pe
 | Redis | `RedisProviderConfiguration` | Implemented (RedLock by default; set `DistributedLockKind = Token` if needed) |
 | Dragonfly | `DragonflyProviderConfiguration` | Implemented (Redis protocol / RedLock) |
 | KeyDB | `KeyDBProviderConfiguration` | Implemented (Redis protocol / RedLock) |
+| Valkey | `ValkeyProviderConfiguration` | Implemented (Redis protocol / RedLock) |
 | Garnet | `GarnetProviderConfiguration` | Implemented (Redis RESP subset / **token lock** by default — no Lua) |
 | Local memory | `LocalMemoryProviderConfiguration` | Implemented |
 | Hazelcast | `HazelcastProviderConfiguration` | Implemented |
@@ -148,6 +149,21 @@ ICache cache = CacheFactory.GetOrCreateCache(
 
 ```csharp
 var providerConfig = new KeyDBProviderConfiguration(
+    endpoint: "127.0.0.1:6379",
+    password: "",
+    cacheName: "orders",
+    useSSL: false,
+    timeToLiveMillis: 300_000);
+
+ICache cache = CacheFactory.GetOrCreateCache(
+    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
+    logger);
+```
+
+#### Valkey
+
+```csharp
+var providerConfig = new ValkeyProviderConfiguration(
     endpoint: "127.0.0.1:6379",
     password: "",
     cacheName: "orders",
@@ -215,11 +231,11 @@ ICache cache = CacheFactory.GetOrCreateCache(
 - Disposing a `Cache` unregisters it from `CacheFactory` and closes provider clients where applicable. Redis TCP multiplexers remain shared for the process.
 - The NuGet package references Hazelcast and Memcached clients even if you only use Redis/LocalMemory.
 
-**Redis / Dragonfly / KeyDB**
+**Redis / Dragonfly / KeyDB / Valkey**
 
 - Default lock: **RedLock** (requires Lua). Data and RedLock share one StackExchange multiplexer.
-- `FlushAsync()` with no key list flushes **only the configured Redis DB index** (`NameIndex`), not every database on the server.
-- Admin permission is required for that flush (`AllowAdmin`).
+- `FlushAsync()` with no key list flushes **only the configured Redis DB index** (`NameIndex`), not every database on the server. It is **not** scoped to `CacheName`.
+- Clear flushes connected **primary** nodes only (replicas skipped). Requires `AllowAdmin` / `FLUSHDB`; on managed services that disable flush, pass an explicit key list or use `FlushKeyAsync`.
 
 **Garnet**
 

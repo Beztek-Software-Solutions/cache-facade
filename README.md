@@ -1,6 +1,6 @@
 # Cache Facade
 
-Unified .NET caching facade (`Beztek.Facade.Cache`) over Redis, Dragonfly, KeyDB, Garnet, Hazelcast, Memcached, and in-process local memory, with optional write-through / write-behind SQL persistence.
+Unified .NET caching facade (`Beztek.Facade.Cache`) over Redis, Dragonfly, KeyDB, Valkey, Garnet, Hazelcast, Memcached, and in-process local memory, with optional write-through / write-behind SQL persistence.
 
 ## Projects
 
@@ -51,7 +51,7 @@ CACHEFACADE_LIVE_PROVIDERS=all \
   dotnet test CacheFacade.Tests/Beztek.Facade.Cache.Tests.csproj --filter Category=Live
 ```
 
-Aliases: `localmemory`/`local`, `redis`, `dragonfly`/`df`, `keydb`, `garnet`, `memcached`/`mc`, `hazelcast`/`hz`, `all`.
+Aliases: `localmemory`/`local`, `redis`, `dragonfly`/`df`, `keydb`, `valkey`/`vk`, `garnet`, `memcached`/`mc`, `hazelcast`/`hz`, `all`.
 
 ## NuGet
 
@@ -68,6 +68,7 @@ dotnet add package Beztek.Facade.Cache
 | Redis | Implemented (`RedisProviderConfiguration`) |
 | Dragonfly | Implemented (`DragonflyProviderConfiguration`; Redis protocol) |
 | KeyDB | Implemented (`KeyDBProviderConfiguration`; Redis protocol) |
+| Valkey | Implemented (`ValkeyProviderConfiguration`; Redis protocol) |
 | Garnet | Implemented (`GarnetProviderConfiguration`; Redis RESP subset, token lock) |
 | Local memory | Implemented (`LocalMemoryProviderConfiguration`) |
 | Hazelcast | Implemented (`HazelcastProviderConfiguration`) |

@@ -25,18 +25,21 @@ namespace Beztek.Facade.Cache
         /// <summary>KeyDB via StackExchange.Redis (Redis-protocol compatible).</summary>
         KeyDB,
 
+        /// <summary>Valkey via StackExchange.Redis (Redis-protocol compatible).</summary>
+        Valkey,
+
         /// <summary>Microsoft Garnet via StackExchange.Redis (Redis RESP subset).</summary>
         Garnet
     }
 
     /// <summary>
-    /// Lock strategy for Redis-protocol backends (Redis, Dragonfly, KeyDB, Garnet).
+    /// Lock strategy for Redis-protocol backends (Redis, Dragonfly, KeyDB, Valkey, Garnet).
     /// </summary>
     public enum RedisDistributedLockKind
     {
         /// <summary>
         /// RedLock algorithm via RedLock.net. Requires Redis Lua scripts for safe unlock.
-        /// Default for Redis, Dragonfly, and KeyDB.
+        /// Default for Redis, Dragonfly, KeyDB, and Valkey.
         /// </summary>
         RedLock,
 

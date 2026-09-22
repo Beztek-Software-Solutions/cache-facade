@@ -41,6 +41,7 @@ namespace Beztek.Facade.Cache.Tests.Live
                     CacheProviderType.Redis => await StartRedisAsync().ConfigureAwait(false),
                     CacheProviderType.Dragonfly => await StartDragonflyAsync().ConfigureAwait(false),
                     CacheProviderType.KeyDB => await StartKeyDbAsync().ConfigureAwait(false),
+                    CacheProviderType.Valkey => await StartValkeyAsync().ConfigureAwait(false),
                     CacheProviderType.Garnet => await StartGarnetAsync().ConfigureAwait(false),
                     CacheProviderType.Memcached => await StartMemcachedAsync().ConfigureAwait(false),
                     CacheProviderType.Hazelcast => await StartHazelcastAsync().ConfigureAwait(false),
@@ -115,6 +116,19 @@ namespace Beztek.Facade.Cache.Tests.Live
             var config = new KeyDBProviderConfiguration(endpoint, password: "", UniqueName("keydb"), useSSL: false);
             ICache cache = CacheFactory.GetOrCreateCache(new CacheConfiguration(config, CacheType.NonPersistent));
             return new LiveProviderHost(CacheProviderType.KeyDB, cache, container);
+        }
+
+        private static async Task<LiveProviderHost> StartValkeyAsync()
+        {
+            IContainer container = new ContainerBuilder("valkey/valkey:8-alpine")
+                .WithPortBinding(6379, true)
+                .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(6379))
+                .Build();
+            await container.StartAsync().ConfigureAwait(false);
+            string endpoint = HostPort(container, 6379);
+            var config = new ValkeyProviderConfiguration(endpoint, password: "", UniqueName("valkey"), useSSL: false);
+            ICache cache = CacheFactory.GetOrCreateCache(new CacheConfiguration(config, CacheType.NonPersistent));
+            return new LiveProviderHost(CacheProviderType.Valkey, cache, container);
         }
 
         private static async Task<LiveProviderHost> StartGarnetAsync()
