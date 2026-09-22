@@ -64,5 +64,26 @@ namespace Beztek.Facade.Cache.Tests
             Assert.That(cache, Is.Not.Null);
             Assert.That(CacheFactory.GetCache(cacheName), Is.Not.Null);
         }
+
+        [Test]
+        public void Dispose_UnregistersFromFactory_AllowsRecreate()
+        {
+            string cacheName = "CacheFactoryDisposeUnregister-" + Guid.NewGuid().ToString("N");
+            var config = new CacheConfiguration(new LocalMemoryProviderConfiguration(cacheName, 300000), CacheType.NonPersistent);
+
+            ICache first = CacheFactory.GetOrCreateCache(config);
+            Assert.That(CacheFactory.GetCache(cacheName), Is.SameAs(first));
+
+            ((Cache)first).Dispose();
+            Assert.That(CacheFactory.GetCache(cacheName), Is.Null);
+
+            ICache second = CacheFactory.GetOrCreateCache(config);
+            Assert.That(second, Is.Not.Null);
+            Assert.That(second, Is.Not.SameAs(first));
+            Assert.That(CacheFactory.GetCache(cacheName), Is.SameAs(second));
+
+            ((Cache)second).Dispose();
+            Assert.That(CacheFactory.GetCache(cacheName), Is.Null);
+        }
     }
 }

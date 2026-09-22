@@ -98,30 +98,26 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
-        public void AcquireSameThreadTest()
+        public void AcquireSameThread_WhileHeld_TimesOut()
         {
-            using (IDisposable lock1 = this.testLock.AcquireLock("test6Lock", 50, 300, 1))
+            using (IDisposable lock1 = this.testLock.AcquireLock("test6Lock", 50, 3000, 1))
             {
                 Assert.That(lock1, Is.Not.Null);
-                using IDisposable lock2 = this.testLock.AcquireLock("test6Lock", 50, 300, 1);
-                Assert.That(lock2, Is.Not.Null);
+                Assert.Throws<TimeoutException>(() =>
+                    this.testLock.AcquireLock("test6Lock", 50, 300, 1));
             }
         }
 
         [Test]
-        public void ReentrantAcquireRenewsExpiry()
+        public void SameThreadCannotReenter_OtherThreadStillBlockedUntilDispose()
         {
-            using (IDisposable outer = this.testLock.AcquireLock("renewLock", 50, 300, 1))
+            using (IDisposable outer = this.testLock.AcquireLock("renewLock", 50, 3000, 1))
             {
-                Thread.Sleep(200);
-                using (IDisposable inner = this.testLock.AcquireLock("renewLock", 50, 300, 1))
-                {
-                    Assert.That(inner, Is.Not.Null);
-                }
+                Assert.Throws<TimeoutException>(() =>
+                    this.testLock.AcquireLock("renewLock", 50, 300, 1));
 
                 bool acquiredByOtherThread = false;
                 Task.Run(() => {
-                    Thread.Sleep(150);
                     try
                     {
                         this.testLock.AcquireLock("renewLock", 5, 100, 1);

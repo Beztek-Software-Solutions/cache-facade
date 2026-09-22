@@ -4,12 +4,14 @@ namespace Beztek.Facade.Cache
 {
     using System;
     using System.Collections.Concurrent;
+    using System.Collections.Generic;
     using System.Threading;
     using Microsoft.Extensions.Logging;
 
     /// <summary>
     /// Static registry of named <see cref="ICache"/> instances.
-    /// Caches are keyed by <see cref="ICacheProviderConfiguration.CacheName"/> and created at most once.
+    /// Caches are keyed by <see cref="ICacheProviderConfiguration.CacheName"/> and created at most once
+    /// until disposed (dispose unregisters the instance so it can be created again).
     /// </summary>
     public static class CacheFactory
     {
@@ -35,27 +37,33 @@ namespace Beztek.Facade.Cache
             ThreadPool.SetMinThreads(workerThreads: 256, completionPortThreads: 256);
 
             string cacheName = cacheConfiguration.CacheProviderConfiguration.CacheName;
-            ICache result;
-            if (!CacheDictionary.TryGetValue(cacheName, out result))
+            if (CacheDictionary.TryGetValue(cacheName, out ICache existing))
             {
-                if (cacheConfiguration.CacheType == CacheType.WriteThrough || cacheConfiguration.CacheType == CacheType.WriteBehind)
-                {
-                    if (cacheConfiguration.PersistenceService == null)
-                    {
-                        throw new ArgumentException($"{cacheConfiguration.CacheType} needs a PersistenceService");
-                    }
-
-                    if (cacheConfiguration.QueueConfiguration == null && cacheConfiguration.CacheType == CacheType.WriteBehind)
-                    {
-                        throw new ArgumentException($"{cacheConfiguration.CacheType} needs a QueueConfiguration");
-                    }
-                }
-
-                result = new Cache(cacheConfiguration, logger);
-                result = CacheDictionary.GetOrAdd(cacheName, result);
+                return existing;
             }
 
-            return result;
+            if (cacheConfiguration.CacheType == CacheType.WriteThrough || cacheConfiguration.CacheType == CacheType.WriteBehind)
+            {
+                if (cacheConfiguration.PersistenceService == null)
+                {
+                    throw new ArgumentException($"{cacheConfiguration.CacheType} needs a PersistenceService");
+                }
+
+                if (cacheConfiguration.QueueConfiguration == null && cacheConfiguration.CacheType == CacheType.WriteBehind)
+                {
+                    throw new ArgumentException($"{cacheConfiguration.CacheType} needs a QueueConfiguration");
+                }
+            }
+
+            var created = new Cache(cacheConfiguration, logger);
+            ICache registered = CacheDictionary.GetOrAdd(cacheName, created);
+            if (!ReferenceEquals(registered, created))
+            {
+                // Lost the registration race; free the orphan's provider resources.
+                created.Dispose();
+            }
+
+            return registered;
         }
 
         /// <summary>
@@ -65,13 +73,26 @@ namespace Beztek.Facade.Cache
         /// <returns>The cache, or <c>null</c> if none has been created for that name.</returns>
         public static ICache GetCache(string cacheName)
         {
-            ICache result;
-            if (CacheDictionary.TryGetValue(cacheName, out result))
+            if (CacheDictionary.TryGetValue(cacheName, out ICache result))
             {
                 return result;
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Removes <paramref name="instance"/> from the registry only if it is still the mapped value for <paramref name="cacheName"/>.
+        /// Called from <see cref="Cache.DisposeAsync"/>.
+        /// </summary>
+        internal static bool TryUnregister(string cacheName, ICache instance)
+        {
+            if (string.IsNullOrEmpty(cacheName) || instance == null)
+            {
+                return false;
+            }
+
+            return CacheDictionary.TryRemove(new KeyValuePair<string, ICache>(cacheName, instance));
         }
     }
 }

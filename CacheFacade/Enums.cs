@@ -3,22 +3,48 @@
 namespace Beztek.Facade.Cache
 {
     /// <summary>
-    /// Supported cache provider backends. Only <see cref="Redis"/> and <see cref="LocalMemory"/>
-    /// are implemented; <see cref="Hazelcast"/> and <see cref="Ignite"/> are reserved for future use.
+    /// Supported cache provider backends.
     /// </summary>
     public enum CacheProviderType
     {
         /// <summary>Redis via StackExchange.Redis (distributed).</summary>
         Redis,
 
-        /// <summary>Reserved. Not implemented.</summary>
+        /// <summary>Hazelcast via Hazelcast.Net (distributed).</summary>
         Hazelcast,
 
-        /// <summary>Reserved. Not implemented.</summary>
-        Ignite,
-
         /// <summary>In-process <c>System.Runtime.Caching.MemoryCache</c> (non-distributed).</summary>
-        LocalMemory
+        LocalMemory,
+
+        /// <summary>Memcached via EnyimMemcachedCore (distributed).</summary>
+        Memcached,
+
+        /// <summary>Dragonfly via StackExchange.Redis (Redis-protocol compatible).</summary>
+        Dragonfly,
+
+        /// <summary>KeyDB via StackExchange.Redis (Redis-protocol compatible).</summary>
+        KeyDB,
+
+        /// <summary>Microsoft Garnet via StackExchange.Redis (Redis RESP subset).</summary>
+        Garnet
+    }
+
+    /// <summary>
+    /// Lock strategy for Redis-protocol backends (Redis, Dragonfly, KeyDB, Garnet).
+    /// </summary>
+    public enum RedisDistributedLockKind
+    {
+        /// <summary>
+        /// RedLock algorithm via RedLock.net. Requires Redis Lua scripts for safe unlock.
+        /// Default for Redis, Dragonfly, and KeyDB.
+        /// </summary>
+        RedLock,
+
+        /// <summary>
+        /// <c>SET NX</c> token lock without Lua. Use when RedLock is unsupported (e.g. Garnet).
+        /// Release prefers a conditional transaction; falls back to get-and-delete if needed.
+        /// </summary>
+        Token
     }
 
     /// <summary>

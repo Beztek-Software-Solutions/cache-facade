@@ -5,7 +5,6 @@ namespace Beztek.Facade.Cache
     using System;
     using System.Collections.Generic;
     using System.IO;
-    using System.Net;
     using System.Threading.Tasks;
 
     using Beztek.Facade.Cache.Providers;
@@ -20,11 +19,9 @@ namespace Beztek.Facade.Cache
     /// Facade implementation of <see cref="ICache"/>. Construct only via <see cref="CacheFactory"/>;
     /// the constructor is internal.
     /// </summary>
-    public class Cache : ICache
+    public class Cache : ICache, IAsyncDisposable, IDisposable
     {
         private const string LockCacheName = "lockCache";
-        private const long LockTimeToLiveMillis = 3000;
-        private const long LockAcquireTimeoutMillis = 1000;
 
         /// <inheritdoc />
         public CacheType CacheType { get; }
@@ -32,6 +29,14 @@ namespace Beztek.Facade.Cache
         internal IPersistenceService PersistenceService { get; }
         private readonly QueueClient queueClient;
         private readonly IDistributedLock DistributedLock;
+        private readonly long LockAcquireTimeoutMillis;
+        private readonly long LockTimeToLiveMillis;
+        private readonly string cacheName;
+        private readonly RedLockFactory redLockFactory;
+        private readonly IAsyncDisposable asyncDisposableProvider;
+        private readonly IDisposable disposableProvider;
+        private int disposed;
+
         /// <summary>Optional logger for facade diagnostics.</summary>
         protected ILogger Logger { get; set; }
 
@@ -46,19 +51,42 @@ namespace Beztek.Facade.Cache
         internal Cache(CacheConfiguration cacheConfiguration, ILogger logger)
         {
             this.Logger = logger;
+            this.cacheName = cacheConfiguration.CacheProviderConfiguration.CacheName;
+            this.LockAcquireTimeoutMillis = Math.Max(1, cacheConfiguration.LockAcquireTimeoutMillis);
+            this.LockTimeToLiveMillis = Math.Max(1, cacheConfiguration.LockTimeToLiveMillis);
 
             switch (cacheConfiguration.CacheProviderConfiguration)
             {
-                // Cache Provider
+                // Cache Provider (Dragonfly/KeyDB/Garnet inherit RedisProviderConfiguration)
                 case RedisProviderConfiguration redisConfiguration:
-                    this.CacheProvider = new RedisProvider(redisConfiguration);
-                    string[] endpointParts = redisConfiguration.Endpoint.Split(":");
-                    var azureEndpoint = new RedLockEndPoint {
-                        EndPoint = new DnsEndPoint(endpointParts[0], Int32.Parse(endpointParts[1])),
-                        Password = redisConfiguration.Password,
-                        Ssl = redisConfiguration.UseSSL
-                    };
-                    this.DistributedLock = new RedisLock(RedLockFactory.Create(new List<RedLockEndPoint>() { azureEndpoint }));
+                    var redisProvider = new RedisProvider(redisConfiguration);
+                    this.CacheProvider = redisProvider;
+                    if (redisConfiguration.DistributedLockKind == RedisDistributedLockKind.Token)
+                    {
+                        this.DistributedLock = new RedisTokenLock(redisProvider.Database, redisConfiguration.CacheName);
+                    }
+                    else
+                    {
+                        // Reuse the same multiplexer as the data connection (no second TCP connection).
+                        this.redLockFactory = RedLockFactory.Create(
+                            new List<RedLockMultiplexer> { new RedLockMultiplexer(redisProvider.Multiplexer) });
+                        this.DistributedLock = new RedisLock(this.redLockFactory);
+                    }
+                    break;
+                case MemcachedProviderConfiguration memcachedConfiguration:
+                    var memcachedProvider = new MemcachedProvider(memcachedConfiguration);
+                    this.CacheProvider = memcachedProvider;
+                    this.DistributedLock = new MemcachedLock(memcachedProvider.Client, memcachedProvider.KeyPrefix);
+                    this.disposableProvider = memcachedProvider.Client as IDisposable;
+                    break;
+                case HazelcastProviderConfiguration hazelcastConfiguration:
+                    var hazelcastProvider = new HazelcastProvider(hazelcastConfiguration);
+                    this.CacheProvider = hazelcastProvider;
+                    var hazelcastLockMap = hazelcastProvider.Client
+                        .GetMapAsync<string, byte[]>(hazelcastConfiguration.CacheName + "__locks")
+                        .GetAwaiter().GetResult();
+                    this.DistributedLock = new HazelcastLock(hazelcastLockMap);
+                    this.asyncDisposableProvider = hazelcastProvider;
                     break;
                 case LocalMemoryProviderConfiguration localMemoryProviderConfiguration:
                     this.CacheProvider = new LocalMemoryProvider(localMemoryProviderConfiguration);
@@ -109,6 +137,39 @@ namespace Beztek.Facade.Cache
                 // Persistence
                 this.PersistenceService = cacheConfiguration.PersistenceService;
             }
+        }
+
+        /// <summary>
+        /// Unregisters this instance from <see cref="CacheFactory"/> and releases provider clients
+        /// (Hazelcast/Memcached) and the RedLock factory. Redis multiplexers stay process-shared.
+        /// </summary>
+        public void Dispose()
+        {
+            DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Unregisters this instance from <see cref="CacheFactory"/> and releases provider clients
+        /// (Hazelcast/Memcached) and the RedLock factory. Redis multiplexers stay process-shared.
+        /// After dispose, <see cref="CacheFactory.GetOrCreateCache"/> may create a new instance for the same name.
+        /// </summary>
+        public async ValueTask DisposeAsync()
+        {
+            if (System.Threading.Interlocked.Exchange(ref this.disposed, 1) != 0)
+            {
+                return;
+            }
+
+            CacheFactory.TryUnregister(this.cacheName, this);
+
+            this.redLockFactory?.Dispose();
+            this.disposableProvider?.Dispose();
+            if (this.asyncDisposableProvider != null)
+            {
+                await this.asyncDisposableProvider.DisposeAsync().ConfigureAwait(false);
+            }
+
+            GC.SuppressFinalize(this);
         }
         /// <inheritdoc />
         public async Task<T> GetAsync<T>(string key)
@@ -457,7 +518,7 @@ namespace Beztek.Facade.Cache
 
         private static int CalculateRetryIntervalMillis(long timeoutMillis)
         {
-            return (int)Math.Min(timeoutMillis / 100, 1);
+            return (int)Math.Max(timeoutMillis / 100, 1);
         }
 
         /// <summary>

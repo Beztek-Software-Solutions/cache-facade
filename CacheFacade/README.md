@@ -2,7 +2,7 @@
 
 ## Introduction
 
-`Beztek.Facade.Cache` is a unified caching facade for .NET. Services read and write objects through a single `ICache` API; the library can keep those objects in Redis or in-process memory, and optionally persist them with write-through or write-behind SQL.
+`Beztek.Facade.Cache` is a unified caching facade for .NET. Services read and write objects through a single `ICache` API; the library can keep those objects in Redis, Dragonfly, KeyDB, Garnet, Hazelcast, Memcached, or in-process memory, and optionally persist them with write-through or write-behind SQL.
 
 ## Details
 
@@ -31,7 +31,7 @@ With Redis in a clustered micro-service you get cache performance with SQL query
 | `RemoveAsync<T>` | Remove from cache (+ delete / enqueue per mode) |
 | `SearchByQueryAsync<T>` | Paged SQL id query + hydrate via `GetAsync` |
 | `FlushKeyAsync` / `FlushAsync` | Evict from provider only (write-behind snapshots still drain) |
-| `AcquireLock` | Named disposable lock (Redis RedLock or local reentrant lock) |
+| `AcquireLock` | Named disposable lock (RedLock, Redis token lock, Hazelcast/Memcached token locks, or local non-reentrant lock). Timeouts: `CacheConfiguration.LockAcquireTimeoutMillis` / `LockTimeToLiveMillis` (defaults 2s / 10s). |
 
 Obtain instances only via `CacheFactory.GetOrCreateCache` / `GetCache`.
 
@@ -76,13 +76,171 @@ ICache cache = CacheFactory.GetOrCreateCache(cacheConfig, logger);
 
 Look up an existing instance: `CacheFactory.GetCache("orders")`.
 
+For write-through/slow SQL, raise lock lease so it covers the persistence call:
+
+```csharp
+var cacheConfig = new CacheConfiguration(redisConfig, CacheType.WriteThrough, persistence)
+{
+    LockAcquireTimeoutMillis = 5_000,
+    LockTimeToLiveMillis = 30_000,
+};
+```
+
+`Cache` implements `IAsyncDisposable` / `IDisposable`. Dispose **unregisters** the instance from `CacheFactory` (so the same name can be created again) and releases Hazelcast/Memcached clients plus the RedLock factory. Redis multiplexers stay process-shared for connection reuse.
+
 ### Providers
 
 | Provider | Configuration type | Status |
 |----------|-------------------|--------|
-| Redis | `RedisProviderConfiguration` | Implemented |
+| Redis | `RedisProviderConfiguration` | Implemented (RedLock by default; set `DistributedLockKind = Token` if needed) |
+| Dragonfly | `DragonflyProviderConfiguration` | Implemented (Redis protocol / RedLock) |
+| KeyDB | `KeyDBProviderConfiguration` | Implemented (Redis protocol / RedLock) |
+| Garnet | `GarnetProviderConfiguration` | Implemented (Redis RESP subset / **token lock** by default — no Lua) |
 | Local memory | `LocalMemoryProviderConfiguration` | Implemented |
-| Hazelcast | — | Enum placeholder only |
+| Hazelcast | `HazelcastProviderConfiguration` | Implemented |
+| Memcached | `MemcachedProviderConfiguration` | Implemented (locks: Add + CAS expire-on-release; no scoped Clear) |
+
+Each example creates a non-persistent `ICache`. Swap in `CacheType.WriteThrough` / `WriteBehind` (and persistence / queue) the same way as the samples above.
+
+#### Local memory
+
+```csharp
+var providerConfig = new LocalMemoryProviderConfiguration("orders", timeToLiveMillis: 300_000);
+ICache cache = CacheFactory.GetOrCreateCache(
+    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
+    logger);
+```
+
+#### Redis
+
+```csharp
+var providerConfig = new RedisProviderConfiguration(
+    endpoint: "mycache.redis.cache.windows.net:6380",
+    password: redisPassword,
+    cacheName: "orders",
+    useSSL: true,
+    timeToLiveMillis: 300_000);
+
+// Optional: use SET NX token locks instead of RedLock (e.g. when Lua is unavailable)
+// providerConfig.DistributedLockKind = RedisDistributedLockKind.Token;
+
+ICache cache = CacheFactory.GetOrCreateCache(
+    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
+    logger);
+```
+
+#### Dragonfly
+
+```csharp
+var providerConfig = new DragonflyProviderConfiguration(
+    endpoint: "127.0.0.1:6379",
+    password: "",
+    cacheName: "orders",
+    useSSL: false,
+    timeToLiveMillis: 300_000);
+
+ICache cache = CacheFactory.GetOrCreateCache(
+    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
+    logger);
+```
+
+#### KeyDB
+
+```csharp
+var providerConfig = new KeyDBProviderConfiguration(
+    endpoint: "127.0.0.1:6379",
+    password: "",
+    cacheName: "orders",
+    useSSL: false,
+    timeToLiveMillis: 300_000);
+
+ICache cache = CacheFactory.GetOrCreateCache(
+    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
+    logger);
+```
+
+#### Garnet
+
+Garnet defaults to **token lock** (`SET NX`); RedLock/Lua is often unavailable.
+
+```csharp
+var providerConfig = new GarnetProviderConfiguration(
+    endpoint: "127.0.0.1:6379",
+    password: "",
+    cacheName: "orders",
+    useSSL: false,
+    timeToLiveMillis: 300_000);
+
+ICache cache = CacheFactory.GetOrCreateCache(
+    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
+    logger);
+```
+
+#### Memcached
+
+```csharp
+var providerConfig = new MemcachedProviderConfiguration(
+    endpoint: "127.0.0.1:11211",
+    cacheName: "orders",
+    timeToLiveMillis: 300_000);
+
+ICache cache = CacheFactory.GetOrCreateCache(
+    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
+    logger);
+```
+
+#### Hazelcast
+
+Cluster name must match the cluster (e.g. `HZ_CLUSTERNAME=dev`).
+
+```csharp
+var providerConfig = new HazelcastProviderConfiguration(
+    clusterName: "dev",
+    address: "127.0.0.1:5701",
+    cacheName: "orders",
+    timeToLiveMillis: 300_000);
+
+ICache cache = CacheFactory.GetOrCreateCache(
+    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
+    logger);
+```
+
+### Provider notes
+
+**Cross-cutting**
+
+- Locks are **coordination, not transactions**. Defaults: acquire wait **2s**, lease **10s**. Raise `LockTimeToLiveMillis` if write-through SQL can run longer than the lease.
+- Locks are **non-reentrant** on every provider (including LocalMemory).
+- Prefer `FlushKeyAsync` or `FlushAsync(keys)` in shared environments; full clear semantics differ by backend.
+- Disposing a `Cache` unregisters it from `CacheFactory` and closes provider clients where applicable. Redis TCP multiplexers remain shared for the process.
+- The NuGet package references Hazelcast and Memcached clients even if you only use Redis/LocalMemory.
+
+**Redis / Dragonfly / KeyDB**
+
+- Default lock: **RedLock** (requires Lua). Data and RedLock share one StackExchange multiplexer.
+- `FlushAsync()` with no key list flushes **only the configured Redis DB index** (`NameIndex`), not every database on the server.
+- Admin permission is required for that flush (`AllowAdmin`).
+
+**Garnet**
+
+- Defaults to **`DistributedLockKind.Token`** (`SET NX` + conditional unlock). RedLock/Lua is often unavailable.
+- If WATCH/MULTI is unsupported, unlock leaves the key to expire via TTL (does not blindly delete).
+
+**LocalMemory**
+
+- Process-local only — not shared across instances or pods.
+
+**Hazelcast**
+
+- Cluster name must match the cluster (e.g. `HZ_CLUSTERNAME=dev`).
+- Construction blocks on async client start; dispose the `Cache` to close the client.
+- Locks use a dedicated `{cacheName}__locks` map (token PutIfAbsent).
+
+**Memcached**
+
+- Keys are prefixed with the cache name.
+- Locks: `Add` + CAS with a past absolute expiry on release (compare-and-expire). Lease durations are at least **1 second** (Memcached TTL granularity).
+- `FlushAsync()` with no keys / provider `Clear` is **not supported** (would flush the whole Memcached process). Pass an explicit key list or use `FlushKeyAsync`.
 
 ## Write-behind cache
 
@@ -266,3 +424,12 @@ Need write-behind?
 | `CacheWriteBehindProcessor<T>` | Queue drain for `WriteBehindMessage` |
 
 XML documentation is included in the NuGet package (`GenerateDocumentationFile`).
+
+## Live container tests
+
+Optional Testcontainers suite under `CacheFacade.Tests/Live/` (same pattern as SqlFacade). Discovered only when `CACHEFACADE_LIVE_PROVIDERS` is set — see the repo [README](../README.md#live-container-tests).
+
+```bash
+CACHEFACADE_LIVE_PROVIDERS=redis dotnet test --filter Category=Live
+CACHEFACADE_LIVE_PROVIDERS=all   dotnet test --filter Category=Live
+```

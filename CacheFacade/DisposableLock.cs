@@ -7,7 +7,8 @@ namespace Beztek.Facade.Cache
     using System.Threading;
 
     /// <summary>
-    /// In-process reentrant lock for single-instance local-memory caches.
+    /// In-process non-reentrant lock for single-instance local-memory caches.
+    /// Matches distributed providers: a second acquire while held (including on the same thread) waits or times out.
     /// Lock state is held in a static <see cref="ConcurrentDictionary{TKey,TValue}"/> keyed by lock name.
     /// Dispose is thread-agnostic so <c>await</c> / <c>ConfigureAwait(false)</c> resumptions still release.
     /// </summary>
@@ -52,7 +53,6 @@ namespace Beztek.Facade.Cache
                 retryIntervalMillis = 1;
             }
 
-            int currentThreadId = Environment.CurrentManagedThreadId;
             LockState state = Locks.GetOrAdd(lockName, _ => new LockState());
             long deadlineMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + timeoutMillis;
 
@@ -61,8 +61,10 @@ namespace Beztek.Facade.Cache
                 while (true)
                 {
                     long nowMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    if (TryAcquireLocked(state, currentThreadId, nowMillis, lockTimeMillis))
+                    if (!state.Held || nowMillis >= state.ExpiryTimeMillis)
                     {
+                        state.Held = true;
+                        state.ExpiryTimeMillis = nowMillis + lockTimeMillis;
                         return new DisposableLock(lockName);
                     }
 
@@ -91,26 +93,6 @@ namespace Beztek.Facade.Cache
             GC.SuppressFinalize(this);
         }
 
-        private static bool TryAcquireLocked(LockState state, int currentThreadId, long nowMillis, long lockTimeMillis)
-        {
-            if (state.RefCount == 0 || nowMillis >= state.ExpiryTimeMillis)
-            {
-                state.OwnerThreadId = currentThreadId;
-                state.RefCount = 1;
-                state.ExpiryTimeMillis = nowMillis + lockTimeMillis;
-                return true;
-            }
-
-            if (state.OwnerThreadId == currentThreadId)
-            {
-                state.RefCount++;
-                state.ExpiryTimeMillis = nowMillis + lockTimeMillis;
-                return true;
-            }
-
-            return false;
-        }
-
         private void Release()
         {
             if (!Locks.TryGetValue(this.lockName, out LockState state))
@@ -120,18 +102,8 @@ namespace Beztek.Facade.Cache
 
             lock (state.Sync)
             {
-                if (state.RefCount == 0)
-                {
-                    return;
-                }
-
-                state.RefCount--;
-                if (state.RefCount == 0)
-                {
-                    state.OwnerThreadId = 0;
-                    state.ExpiryTimeMillis = 0;
-                }
-
+                state.Held = false;
+                state.ExpiryTimeMillis = 0;
                 Monitor.PulseAll(state.Sync);
             }
         }
@@ -140,9 +112,7 @@ namespace Beztek.Facade.Cache
         {
             internal readonly object Sync = new object();
 
-            internal int OwnerThreadId { get; set; }
-
-            internal int RefCount { get; set; }
+            internal bool Held { get; set; }
 
             internal long ExpiryTimeMillis { get; set; }
         }

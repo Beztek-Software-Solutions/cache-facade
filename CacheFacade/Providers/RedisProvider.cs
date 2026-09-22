@@ -3,6 +3,7 @@
 namespace Beztek.Facade.Cache.Providers
 {
     using System;
+    using System.Collections.Concurrent;
     using System.IO;
     using StackExchange.Redis;
 
@@ -14,16 +15,15 @@ namespace Beztek.Facade.Cache.Providers
         public const SerializationType SerType = SerializationType.Json;
 
         /// <summary>
-        /// Configuration for Redis CacheProvider.
+        /// Shared multiplexers keyed by connection identity so distinct endpoints
+        /// (Redis vs Dragonfly vs Garnet in live tests) do not collide.
         /// </summary>
-        private static ConfigurationOptions ConnectionConfig { get; set; }
-
-        /// <summary>
-        /// Redis CacheProvider connection that will be thread safe lazy initialize.
-        /// </summary>
-        private static readonly Lazy<ConnectionMultiplexer> LazyConnection = new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(ConnectionConfig));
+        private static readonly ConcurrentDictionary<string, Lazy<ConnectionMultiplexer>> Multiplexers =
+            new ConcurrentDictionary<string, Lazy<ConnectionMultiplexer>>(StringComparer.Ordinal);
 
         private readonly IDatabase cacheDatabase;
+        private readonly string connectionKey;
+        private readonly int databaseIndex;
         private TimeSpan TimeToLive;
 
         /// <summary>
@@ -32,17 +32,23 @@ namespace Beztek.Facade.Cache.Providers
         /// <param name="redisCacheConfiguration">Redis cache configuration.</param>
         public RedisProvider(RedisProviderConfiguration redisCacheConfiguration)
         {
-            ConnectionConfig = string.IsNullOrWhiteSpace(redisCacheConfiguration.Options) ?
+            ConfigurationOptions connectionConfig = string.IsNullOrWhiteSpace(redisCacheConfiguration.Options) ?
                 new ConfigurationOptions() : ConfigurationOptions.Parse(redisCacheConfiguration.Options);
 
-            ConnectionConfig.Password = redisCacheConfiguration.Password;
-            ConnectionConfig.Ssl = redisCacheConfiguration.UseSSL;
-            ConnectionConfig.AbortOnConnectFail = redisCacheConfiguration.AbortConnection;
-            ConnectionConfig.AllowAdmin = true;
-            ConnectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
+            connectionConfig.Password = redisCacheConfiguration.Password;
+            connectionConfig.Ssl = redisCacheConfiguration.UseSSL;
+            connectionConfig.AbortOnConnectFail = redisCacheConfiguration.AbortConnection;
+            connectionConfig.AllowAdmin = true;
+            connectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
 
-            this.cacheDatabase = LazyConnection.Value.GetDatabase(redisCacheConfiguration.NameIndex);
-            //this.Endpoint = redisCacheConfiguration.Endpoint;
+            this.connectionKey = BuildConnectionKey(redisCacheConfiguration);
+            this.databaseIndex = redisCacheConfiguration.NameIndex;
+            ConfigurationOptions connectOptions = connectionConfig;
+            ConnectionMultiplexer multiplexer = Multiplexers.GetOrAdd(
+                this.connectionKey,
+                _ => new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(connectOptions))).Value;
+
+            this.cacheDatabase = multiplexer.GetDatabase(this.databaseIndex);
             this.TimeToLive = TimeSpan.FromMilliseconds(redisCacheConfiguration.TimeToLiveMillis);
         }
 
@@ -53,7 +59,18 @@ namespace Beztek.Facade.Cache.Providers
         internal RedisProvider(IDatabase cacheDatabase)
         {
             this.cacheDatabase = cacheDatabase;
+            this.connectionKey = null;
+            this.databaseIndex = 0;
         }
+
+        /// <summary>Underlying Redis database used for cache operations and token locks.</summary>
+        internal IDatabase Database => this.cacheDatabase;
+
+        /// <summary>Shared multiplexer for this endpoint (also used by RedLock).</summary>
+        internal IConnectionMultiplexer Multiplexer =>
+            this.connectionKey != null && Multiplexers.TryGetValue(this.connectionKey, out Lazy<ConnectionMultiplexer> lazy)
+                ? lazy.Value
+                : this.cacheDatabase?.Multiplexer;
 
         public T Get<T>(string key)
         {
@@ -88,13 +105,30 @@ namespace Beztek.Facade.Cache.Providers
 
         public bool Clear()
         {
-            ConnectionMultiplexer redis = LazyConnection.Value;
+            if (this.connectionKey == null || !Multiplexers.TryGetValue(this.connectionKey, out Lazy<ConnectionMultiplexer> lazy))
+            {
+                return false;
+            }
+
+            // Flush only this logical DB — never FlushAllDatabases (would wipe every DB on the server).
+            ConnectionMultiplexer redis = lazy.Value;
             foreach (var endpoint in redis.GetEndPoints())
             {
                 IServer server = redis.GetServer(endpoint);
-                server.FlushAllDatabases();
+                server.FlushDatabase(this.databaseIndex);
             }
             return true;
+        }
+
+        private static string BuildConnectionKey(RedisProviderConfiguration configuration)
+        {
+            return string.Join(
+                "|",
+                configuration.Endpoint ?? "",
+                configuration.Password ?? "",
+                configuration.UseSSL,
+                configuration.AbortConnection,
+                configuration.Options ?? "");
         }
     }
 }

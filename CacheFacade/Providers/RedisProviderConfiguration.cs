@@ -28,6 +28,7 @@ namespace Beztek.Facade.Cache
             this.NameIndex = nameIndex;
             this.TimeToLiveMillis = timeToLiveMillis;
             this.ProviderType = CacheProviderType.Redis;
+            this.DistributedLockKind = RedisDistributedLockKind.RedLock;
         }
 
         /// <summary>Redis server endpoint (host:port).</summary>
@@ -53,6 +54,12 @@ namespace Beztek.Facade.Cache
 
         /// <inheritdoc />
         public long TimeToLiveMillis { get; set; }
+
+        /// <summary>
+        /// Lock strategy for this Redis-protocol backend.
+        /// Use <see cref="RedisDistributedLockKind.Token"/> when RedLock/Lua is unavailable (e.g. Garnet).
+        /// </summary>
+        public RedisDistributedLockKind DistributedLockKind { get; set; }
 
         /// <summary>
         /// A comma-separated list of name=value pairs for the underlying Redis client.
