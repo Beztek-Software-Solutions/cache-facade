@@ -8,7 +8,8 @@ namespace Beztek.Facade.Cache
 
     /// <summary>
     /// Redis-protocol lock that does not require Lua (unlike RedLock unlock).
-    /// Acquire uses <c>SET NX</c> with TTL; release uses a conditional transaction when supported.
+    /// Acquire uses <c>SET NX</c> with TTL; release uses <see cref="IDatabase.LockRelease"/>
+    /// (atomic CAD on Redis 8.4+, conditional transaction on older servers).
     /// If compare-and-delete is unavailable, the key is left to expire via TTL (never blindly deleted).
     /// </summary>
     internal class RedisTokenLock : IDisposable, IDistributedLock
@@ -90,15 +91,14 @@ namespace Beztek.Facade.Cache
 
             try
             {
-                ITransaction tran = this.database.CreateTransaction();
-                tran.AddCondition(Condition.StringEqual(this.lockKey, this.token));
-                _ = tran.KeyDeleteAsync(this.lockKey);
-                tran.Execute();
+                // Prefer LockRelease over hand-rolled WATCH/MULTI: SE.Redis uses DELEX IFEQ on
+                // Redis 8.4+ and a conditional transaction on older servers (SER301).
+                this.database.LockRelease(this.lockKey, this.token);
             }
             catch
             {
-                // RESP subsets may lack WATCH/MULTI. Do not get-and-delete — that can remove a newer
-                // owner's lock. Leave the key; lease TTL will release it.
+                // RESP subsets may lack WATCH/MULTI (and CAD). Do not get-and-delete — that can
+                // remove a newer owner's lock. Leave the key; lease TTL will release it.
             }
 
             GC.SuppressFinalize(this);

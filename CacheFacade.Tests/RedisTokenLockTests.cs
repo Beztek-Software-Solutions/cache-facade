@@ -3,7 +3,6 @@
 namespace Beztek.Facade.Cache.Tests
 {
     using System;
-    using System.Threading.Tasks;
     using Beztek.Facade.Cache;
     using Moq;
     using NUnit.Framework;
@@ -28,12 +27,9 @@ namespace Beztek.Facade.Cache.Tests
             this.database
                 .Setup(d => d.StringSet("orders:lock:k1", It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), When.NotExists))
                 .Returns(true);
-
-            var tran = new Mock<ITransaction>();
-            tran.Setup(t => t.AddCondition(It.IsAny<Condition>()));
-            tran.Setup(t => t.KeyDeleteAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).Returns(Task.FromResult(true));
-            tran.Setup(t => t.Execute(It.IsAny<CommandFlags>())).Returns(true);
-            this.database.Setup(d => d.CreateTransaction(It.IsAny<object>())).Returns(tran.Object);
+            this.database
+                .Setup(d => d.LockRelease("orders:lock:k1", It.IsAny<RedisValue>(), It.IsAny<CommandFlags>()))
+                .Returns(true);
 
             using IDisposable handle = this.factory.AcquireLock("k1", 50, 300, 1);
             Assert.That(handle, Is.Not.Null);
@@ -50,22 +46,20 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
-        public void Dispose_UsesConditionalTransaction_WithoutBlindDeleteFallback()
+        public void Dispose_UsesLockRelease_WithoutBlindDeleteFallback()
         {
             this.database
                 .Setup(d => d.StringSet("orders:lock:k1", It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), When.NotExists))
                 .Returns(true);
-
-            var tran = new Mock<ITransaction>();
-            tran.Setup(t => t.AddCondition(It.IsAny<Condition>()));
-            tran.Setup(t => t.KeyDeleteAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).Returns(Task.FromResult(true));
-            tran.Setup(t => t.Execute(It.IsAny<CommandFlags>())).Throws(new NotSupportedException("no WATCH"));
-            this.database.Setup(d => d.CreateTransaction(It.IsAny<object>())).Returns(tran.Object);
+            this.database
+                .Setup(d => d.LockRelease("orders:lock:k1", It.IsAny<RedisValue>(), It.IsAny<CommandFlags>()))
+                .Throws(new NotSupportedException("no WATCH/CAD"));
 
             using (this.factory.AcquireLock("k1", 50, 300, 1))
             {
             }
 
+            this.database.Verify(d => d.LockRelease("orders:lock:k1", It.IsAny<RedisValue>(), It.IsAny<CommandFlags>()), Times.Once);
             // Must not fall back to StringGet/KeyDelete (could remove another owner's lock).
             this.database.Verify(d => d.StringGet(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()), Times.Never);
             this.database.Verify(d => d.KeyDelete(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()), Times.Never);
