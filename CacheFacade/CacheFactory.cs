@@ -42,19 +42,31 @@ namespace Beztek.Facade.Cache
                 return existing;
             }
 
-            if (cacheConfiguration.CacheType == CacheType.WriteThrough || cacheConfiguration.CacheType == CacheType.WriteBehind)
-            {
-                if (cacheConfiguration.PersistenceService == null)
-                {
-                    throw new ArgumentException($"{cacheConfiguration.CacheType} needs a PersistenceService");
-                }
+            ValidatePersistenceConfiguration(cacheConfiguration);
+            return RegisterNewCache(cacheName, cacheConfiguration, logger);
+        }
 
-                if (cacheConfiguration.QueueConfiguration == null && cacheConfiguration.CacheType == CacheType.WriteBehind)
-                {
-                    throw new ArgumentException($"{cacheConfiguration.CacheType} needs a QueueConfiguration");
-                }
+        private static void ValidatePersistenceConfiguration(CacheConfiguration cacheConfiguration)
+        {
+            if (cacheConfiguration.CacheType != CacheType.WriteThrough
+                && cacheConfiguration.CacheType != CacheType.WriteBehind)
+            {
+                return;
             }
 
+            if (cacheConfiguration.PersistenceService == null)
+            {
+                throw new ArgumentException($"{cacheConfiguration.CacheType} needs a PersistenceService");
+            }
+
+            if (cacheConfiguration.QueueConfiguration == null && cacheConfiguration.CacheType == CacheType.WriteBehind)
+            {
+                throw new ArgumentException($"{cacheConfiguration.CacheType} needs a QueueConfiguration");
+            }
+        }
+
+        private static ICache RegisterNewCache(string cacheName, CacheConfiguration cacheConfiguration, ILogger logger)
+        {
             var created = new Cache(cacheConfiguration, logger);
             ICache registered = CacheDictionary.GetOrAdd(cacheName, created);
             if (!ReferenceEquals(registered, created))

@@ -30,25 +30,13 @@ namespace Beztek.Facade.Cache.Providers
         /// Initializes a new instance of the <see cref="RedisProvider"/> class using redis cache configuration.
         /// </summary>
         /// <param name="redisCacheConfiguration">Redis cache configuration.</param>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
         public RedisProvider(RedisProviderConfiguration redisCacheConfiguration)
         {
-            ConfigurationOptions connectionConfig = string.IsNullOrWhiteSpace(redisCacheConfiguration.Options) ?
-                new ConfigurationOptions() : ConfigurationOptions.Parse(redisCacheConfiguration.Options);
-
-            connectionConfig.Password = redisCacheConfiguration.Password;
-            connectionConfig.Ssl = redisCacheConfiguration.UseSSL;
-            connectionConfig.AbortOnConnectFail = redisCacheConfiguration.AbortConnection;
-            connectionConfig.AllowAdmin = true;
-            connectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
-
+            ConfigurationOptions connectionConfig = BuildConfigurationOptions(redisCacheConfiguration);
             this.connectionKey = BuildConnectionKey(redisCacheConfiguration);
             this.databaseIndex = redisCacheConfiguration.NameIndex;
-            ConfigurationOptions connectOptions = connectionConfig;
-            ConnectionMultiplexer multiplexer = Multiplexers.GetOrAdd(
-                this.connectionKey,
-                _ => new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(connectOptions))).Value;
-
-            this.cacheDatabase = multiplexer.GetDatabase(this.databaseIndex);
+            this.cacheDatabase = ConnectDatabase(this.connectionKey, connectionConfig, this.databaseIndex);
             this.TimeToLive = TimeSpan.FromMilliseconds(redisCacheConfiguration.TimeToLiveMillis);
         }
 
@@ -110,9 +98,69 @@ namespace Beztek.Facade.Cache.Providers
                 return false;
             }
 
+            return FlushConnectedOrFallback(lazy.Value);
+        }
+
+        /// <summary>Builds the shared-multiplexer dictionary key from connection identity fields.</summary>
+        internal static string BuildConnectionKey(RedisProviderConfiguration configuration)
+        {
+            return string.Join(
+                "|",
+                configuration.Endpoint ?? "",
+                configuration.Password ?? "",
+                configuration.UseSSL,
+                configuration.AbortConnection,
+                configuration.Options ?? "");
+        }
+
+        private static ConfigurationOptions BuildConfigurationOptions(RedisProviderConfiguration redisCacheConfiguration)
+        {
+            ConfigurationOptions connectionConfig = string.IsNullOrWhiteSpace(redisCacheConfiguration.Options) ?
+                new ConfigurationOptions() : ConfigurationOptions.Parse(redisCacheConfiguration.Options);
+
+            connectionConfig.Password = redisCacheConfiguration.Password;
+            connectionConfig.Ssl = redisCacheConfiguration.UseSSL;
+            connectionConfig.AbortOnConnectFail = redisCacheConfiguration.AbortConnection;
+            connectionConfig.AllowAdmin = true;
+            connectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
+            return connectionConfig;
+        }
+
+        /// <summary>
+        /// Connects (or reuses) a process-shared multiplexer. Covered by live Redis-protocol tests.
+        /// </summary>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+        private static IDatabase ConnectDatabase(string connectionKey, ConfigurationOptions connectOptions, int databaseIndex)
+        {
+            ConnectionMultiplexer multiplexer = Multiplexers.GetOrAdd(
+                connectionKey,
+                _ => new Lazy<ConnectionMultiplexer>(() => ConnectionMultiplexer.Connect(connectOptions))).Value;
+            return multiplexer.GetDatabase(databaseIndex);
+        }
+
+        /// <summary>
+        /// FLUSHDB across connected primaries, with standalone Execute fallback.
+        /// Covered by live Redis-protocol tests (needs a real multiplexer topology).
+        /// </summary>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+        private bool FlushConnectedOrFallback(ConnectionMultiplexer redis)
+        {
             // FLUSHDB is server-scoped: flush every connected primary. Skipping replicas avoids
             // READONLY failures (Redis/Valkey/Dragonfly/KeyDB/Garnet share this path).
-            ConnectionMultiplexer redis = lazy.Value;
+            int flushed = FlushConnectedPrimaries(redis);
+            if (flushed > 0)
+            {
+                return true;
+            }
+
+            // Standalone / single-node fallback when topology has not advertised a usable primary yet.
+            this.cacheDatabase.Execute("FLUSHDB");
+            return true;
+        }
+
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+        private int FlushConnectedPrimaries(ConnectionMultiplexer redis)
+        {
             int flushed = 0;
             foreach (var endpoint in redis.GetEndPoints())
             {
@@ -126,25 +174,7 @@ namespace Beztek.Facade.Cache.Providers
                 flushed++;
             }
 
-            if (flushed > 0)
-            {
-                return true;
-            }
-
-            // Standalone / single-node fallback when topology has not advertised a usable primary yet.
-            this.cacheDatabase.Execute("FLUSHDB");
-            return true;
-        }
-
-        private static string BuildConnectionKey(RedisProviderConfiguration configuration)
-        {
-            return string.Join(
-                "|",
-                configuration.Endpoint ?? "",
-                configuration.Password ?? "",
-                configuration.UseSSL,
-                configuration.AbortConnection,
-                configuration.Options ?? "");
+            return flushed;
         }
     }
 }

@@ -74,6 +74,8 @@ var cacheConfig = new CacheConfiguration(redisConfig, CacheType.WriteBehind, per
 ICache cache = CacheFactory.GetOrCreateCache(cacheConfig, logger);
 ```
 
+`queueProviderConfig` is any `Beztek.Facade.Queue` provider config (**1.2.0+**): LocalMemory (tests), Azure Queue Storage, Azure Service Bus, SQS, RabbitMQ, Google Pub/Sub, Redis/Valkey/Dragonfly, ActiveMQ, or Beanstalkd. Same competing-consumer / poison-queue semantics as queue-facade; see that package’s provider limitations table for peek/depth caveats.
+
 Look up an existing instance: `CacheFactory.GetCache("orders")`.
 
 For write-through/slow SQL, raise lock lease so it covers the persistence call:
@@ -174,6 +176,10 @@ ICache cache = CacheFactory.GetOrCreateCache(
     new CacheConfiguration(providerConfig, CacheType.NonPersistent),
     logger);
 ```
+
+ElastiCache / Valkey **IAM auth** is not built into this library. Supply the
+auth token as `password` (or via the Redis `Options` string). Token generation
+and refresh remain the host application's responsibility.
 
 #### Garnet
 
@@ -300,7 +306,7 @@ The legacy key-only message is obsolete: inferring create/update/delete from liv
 ```csharp
 public interface IWriteBehindEntity : IEtagEntity
 {
-    /// Soft-delete tombstone (OpenSearch _deleted analogue).
+    /// Soft-delete tombstone; readers treat deleted rows as missing.
     bool IsDeleted { get; set; }
 }
 ```
@@ -328,7 +334,7 @@ Hard delete drops the version clock. Then:
 1. Delete@200 is applied (row gone).
 2. Stale Create@100 arrives later → insert succeeds → **row resurrected**.
 
-Soft delete retains the row with sequential etag + `IsDeleted`, so the stale create is rejected (`incoming etag/sequence ≤ persisted`). This matches OpenSearch soft delete + `_sync_version`.
+Soft delete retains the row with sequential etag + `IsDeleted`, so the stale create is rejected (`incoming etag/sequence ≤ persisted`).
 
 In-batch message shuffle is already safe (max `Sequence` wins before apply). Soft delete closes the **cross-batch** create/delete race.
 
@@ -339,7 +345,7 @@ In-batch message shuffle is already safe (max `Sequence` wins before apply). Sof
 | Create / Update | Upsert snapshot; set sequential `Etag` from `Sequence`; `IsDeleted = false` |
 | Delete | Upsert tombstone; set sequential `Etag` from `Sequence`; `IsDeleted = true` (do not `SQL DELETE`) |
 
-Upsert SQL should be version-gated, e.g. only apply when the incoming sequential etag is strictly newer than the persisted etag (same idea as OpenSearch `_sync_version`).
+Upsert SQL should be version-gated, e.g. only apply when the incoming sequential etag is strictly newer than the persisted etag.
 
 ### Consumer checklist
 
@@ -446,6 +452,8 @@ XML documentation is included in the NuGet package (`GenerateDocumentationFile`)
 Optional Testcontainers suite under `CacheFacade.Tests/Live/` (same pattern as SqlFacade). Discovered only when `CACHEFACADE_LIVE_PROVIDERS` is set — see the repo [README](../README.md#live-container-tests).
 
 ```bash
-CACHEFACADE_LIVE_PROVIDERS=redis dotnet test --filter Category=Live
-CACHEFACADE_LIVE_PROVIDERS=all   dotnet test --filter Category=Live
+CACHEFACADE_LIVE_PROVIDERS=redis make test-live
+CACHEFACADE_LIVE_PROVIDERS=all   make test-live
 ```
+
+Write-through / write-behind SQL persistence uses **Beztek.Facade.Sql ≥ 1.4.1**.

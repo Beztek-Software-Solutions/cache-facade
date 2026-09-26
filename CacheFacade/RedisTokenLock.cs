@@ -38,25 +38,7 @@ namespace Beztek.Facade.Cache
 
         public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
         {
-            if (string.IsNullOrEmpty(lockName))
-            {
-                throw new ArgumentException("Lock name is required.", nameof(lockName));
-            }
-
-            if (timeoutMillis < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(timeoutMillis));
-            }
-
-            if (lockTimeMillis <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(lockTimeMillis));
-            }
-
-            if (retryIntervalMillis <= 0)
-            {
-                retryIntervalMillis = 1;
-            }
+            retryIntervalMillis = DistributedLockArgs.Normalize(lockName, timeoutMillis, lockTimeMillis, retryIntervalMillis);
 
             string key = this.keyPrefix + lockName;
             string acquiredToken = Guid.NewGuid().ToString("N");

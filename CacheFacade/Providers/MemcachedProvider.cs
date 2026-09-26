@@ -75,6 +75,10 @@ namespace Beztek.Facade.Cache.Providers
 
         internal string Prefixed(string key) => this.keyPrefix + key;
 
+        /// <summary>
+        /// Opens an Enyim client against a live Memcached endpoint. Covered by live Memcached tests.
+        /// </summary>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
         private static IMemcachedClient CreateClient(MemcachedProviderConfiguration configuration)
         {
             if (configuration == null)
@@ -95,7 +99,8 @@ namespace Beztek.Facade.Cache.Providers
             return new MemcachedClient(loggerFactory, memcachedConfig);
         }
 
-        private static void ParseEndpoint(string endpoint, out string host, out int port)
+        /// <summary>Parses <c>host:port</c> Memcached endpoints.</summary>
+        internal static void ParseEndpoint(string endpoint, out string host, out int port)
         {
             if (string.IsNullOrWhiteSpace(endpoint))
             {

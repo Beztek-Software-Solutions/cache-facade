@@ -14,7 +14,7 @@ namespace Beztek.Facade.Cache
         /// <summary>
         /// Initializes a new instance of the <see cref="QueueConfiguration"/> class.
         /// </summary>
-        /// <param name="queueClient">Queue facade client (local memory, Azure, or SQS).</param>
+        /// <param name="queueClient">Queue facade client (LocalMemory, Azure Queue/Service Bus, SQS, RabbitMQ, Pub/Sub, Redis/Valkey/Dragonfly, ActiveMQ, Beanstalkd, …).</param>
         /// <param name="messageProcessor">Typically a <see cref="CacheWriteBehindProcessor{T}"/> for <see cref="WriteBehindMessage"/>.</param>
         /// <param name="cancellationToken">Cancellation for the background dequeue loop.</param>
         /// <param name="maxProcessingRate">Max messages processed per second.</param>

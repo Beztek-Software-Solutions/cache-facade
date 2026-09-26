@@ -26,15 +26,15 @@ namespace Beztek.Facade.Cache
         /// <inheritdoc />
         public CacheType CacheType { get; }
         internal ICacheProvider CacheProvider { get; set; }
-        internal IPersistenceService PersistenceService { get; }
-        private readonly QueueClient queueClient;
-        private readonly IDistributedLock DistributedLock;
+        internal IPersistenceService PersistenceService { get; private set; }
+        private QueueClient queueClient;
+        private IDistributedLock DistributedLock;
         private readonly long LockAcquireTimeoutMillis;
         private readonly long LockTimeToLiveMillis;
         private readonly string cacheName;
-        private readonly RedLockFactory redLockFactory;
-        private readonly IAsyncDisposable asyncDisposableProvider;
-        private readonly IDisposable disposableProvider;
+        private RedLockFactory redLockFactory;
+        private IAsyncDisposable asyncDisposableProvider;
+        private IDisposable disposableProvider;
         private int disposed;
 
         /// <summary>Optional logger for facade diagnostics.</summary>
@@ -55,38 +55,26 @@ namespace Beztek.Facade.Cache
             this.LockAcquireTimeoutMillis = Math.Max(1, cacheConfiguration.LockAcquireTimeoutMillis);
             this.LockTimeToLiveMillis = Math.Max(1, cacheConfiguration.LockTimeToLiveMillis);
 
+            ConfigureProviderAndLock(cacheConfiguration);
+            ConfigureLocalMemoryLockIfNeeded(cacheConfiguration);
+
+            this.CacheType = cacheConfiguration.CacheType;
+            ConfigurePersistence(cacheConfiguration);
+        }
+
+        private void ConfigureProviderAndLock(CacheConfiguration cacheConfiguration)
+        {
             switch (cacheConfiguration.CacheProviderConfiguration)
             {
                 // Cache Provider (Dragonfly/KeyDB/Valkey/Garnet inherit RedisProviderConfiguration)
                 case RedisProviderConfiguration redisConfiguration:
-                    var redisProvider = new RedisProvider(redisConfiguration);
-                    this.CacheProvider = redisProvider;
-                    if (redisConfiguration.DistributedLockKind == RedisDistributedLockKind.Token)
-                    {
-                        this.DistributedLock = new RedisTokenLock(redisProvider.Database, redisConfiguration.CacheName);
-                    }
-                    else
-                    {
-                        // Reuse the same multiplexer as the data connection (no second TCP connection).
-                        this.redLockFactory = RedLockFactory.Create(
-                            new List<RedLockMultiplexer> { new RedLockMultiplexer(redisProvider.Multiplexer) });
-                        this.DistributedLock = new RedisLock(this.redLockFactory);
-                    }
+                    ConfigureRedis(redisConfiguration);
                     break;
                 case MemcachedProviderConfiguration memcachedConfiguration:
-                    var memcachedProvider = new MemcachedProvider(memcachedConfiguration);
-                    this.CacheProvider = memcachedProvider;
-                    this.DistributedLock = new MemcachedLock(memcachedProvider.Client, memcachedProvider.KeyPrefix);
-                    this.disposableProvider = memcachedProvider.Client as IDisposable;
+                    ConfigureMemcached(memcachedConfiguration);
                     break;
                 case HazelcastProviderConfiguration hazelcastConfiguration:
-                    var hazelcastProvider = new HazelcastProvider(hazelcastConfiguration);
-                    this.CacheProvider = hazelcastProvider;
-                    var hazelcastLockMap = hazelcastProvider.Client
-                        .GetMapAsync<string, byte[]>(hazelcastConfiguration.CacheName + "__locks")
-                        .GetAwaiter().GetResult();
-                    this.DistributedLock = new HazelcastLock(hazelcastLockMap);
-                    this.asyncDisposableProvider = hazelcastProvider;
+                    ConfigureHazelcast(hazelcastConfiguration);
                     break;
                 case LocalMemoryProviderConfiguration localMemoryProviderConfiguration:
                     this.CacheProvider = new LocalMemoryProvider(localMemoryProviderConfiguration);
@@ -95,48 +83,94 @@ namespace Beztek.Facade.Cache
                     // This is useful for unit tests, and only unit tests can reach here
                     break;
             }
+        }
 
+        /// <summary>Connects Redis (or Redis-protocol) providers. Covered by live Redis-protocol tests.</summary>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+        private void ConfigureRedis(RedisProviderConfiguration redisConfiguration)
+        {
+            var redisProvider = new RedisProvider(redisConfiguration);
+            this.CacheProvider = redisProvider;
+            if (redisConfiguration.DistributedLockKind == RedisDistributedLockKind.Token)
+            {
+                this.DistributedLock = new RedisTokenLock(redisProvider.Database, redisConfiguration.CacheName);
+            }
+            else
+            {
+                // Reuse the same multiplexer as the data connection (no second TCP connection).
+                this.redLockFactory = RedLockFactory.Create(
+                    new List<RedLockMultiplexer> { new RedLockMultiplexer(redisProvider.Multiplexer) });
+                this.DistributedLock = new RedisLock(this.redLockFactory);
+            }
+        }
+
+        /// <summary>Connects Memcached. Covered by live Memcached tests.</summary>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+        private void ConfigureMemcached(MemcachedProviderConfiguration memcachedConfiguration)
+        {
+            var memcachedProvider = new MemcachedProvider(memcachedConfiguration);
+            this.CacheProvider = memcachedProvider;
+            this.DistributedLock = new MemcachedLock(memcachedProvider.Client, memcachedProvider.KeyPrefix);
+            this.disposableProvider = memcachedProvider.Client as IDisposable;
+        }
+
+        /// <summary>Connects Hazelcast. Covered by live Hazelcast tests.</summary>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+        private void ConfigureHazelcast(HazelcastProviderConfiguration hazelcastConfiguration)
+        {
+            var hazelcastProvider = new HazelcastProvider(hazelcastConfiguration);
+            this.CacheProvider = hazelcastProvider;
+            var hazelcastLockMap = hazelcastProvider.Client
+                .GetMapAsync<string, byte[]>(hazelcastConfiguration.CacheName + "__locks")
+                .GetAwaiter().GetResult();
+            this.DistributedLock = new HazelcastLock(hazelcastLockMap);
+            this.asyncDisposableProvider = hazelcastProvider;
+        }
+
+        private void ConfigureLocalMemoryLockIfNeeded(CacheConfiguration cacheConfiguration)
+        {
             // In-process lock for local-memory caches (not used when the cache itself is the lock registry).
             if (this.CacheProvider is LocalMemoryProvider
                 && !string.Equals(LockCacheName, cacheConfiguration.CacheProviderConfiguration.CacheName, StringComparison.Ordinal))
             {
                 this.DistributedLock = new DisposableLock();
             }
+        }
 
-            // Cache Type
-            this.CacheType = cacheConfiguration.CacheType;
-
-            if (this.CacheType == CacheType.WriteThrough || this.CacheType == CacheType.WriteBehind)
+        private void ConfigurePersistence(CacheConfiguration cacheConfiguration)
+        {
+            if (this.CacheType != CacheType.WriteThrough && this.CacheType != CacheType.WriteBehind)
             {
-                // Persistence
-                this.PersistenceService = cacheConfiguration.PersistenceService;
-
-                // Queue
-                if (this.CacheType == CacheType.WriteBehind)
-                {
-                    this.queueClient = (QueueClient)cacheConfiguration.QueueConfiguration.QueueClient;
-
-                    DefaultProcessorHandler handler = new DefaultProcessorHandler();
-                    IQueueProcessorHandler queyeProcessorhandler = handler.AddProcessor(typeof(WriteBehindMessage), cacheConfiguration.QueueConfiguration.MessageProcessor);
-
-                    // Setup of dequeueing for the write-behind cache
-                    this.queueClient.DequeueAndProcess(
-                        cacheConfiguration.QueueConfiguration.MaxProcessingRate,
-                        cacheConfiguration.QueueConfiguration.MaxBackgroundTasks,
-                        queyeProcessorhandler,
-                        cacheConfiguration.QueueConfiguration.CancellationToken,
-                        cacheConfiguration.QueueConfiguration.BatchSize,
-                        cacheConfiguration.QueueConfiguration.PollIntervalMillis,
-                        cacheConfiguration.QueueConfiguration.MaxProcessingAttempts
-                    );
-                }
+                return;
             }
 
-            if (this.CacheType == CacheType.WriteThrough || this.CacheType == CacheType.WriteBehind)
+            this.PersistenceService = cacheConfiguration.PersistenceService;
+
+            if (this.CacheType == CacheType.WriteBehind)
             {
-                // Persistence
-                this.PersistenceService = cacheConfiguration.PersistenceService;
+                ConfigureWriteBehindQueue(cacheConfiguration);
             }
+        }
+
+        private void ConfigureWriteBehindQueue(CacheConfiguration cacheConfiguration)
+        {
+            this.queueClient = (QueueClient)cacheConfiguration.QueueConfiguration.QueueClient;
+
+            DefaultProcessorHandler handler = new DefaultProcessorHandler();
+            IQueueProcessorHandler queyeProcessorhandler = handler.AddProcessor(
+                typeof(WriteBehindMessage),
+                cacheConfiguration.QueueConfiguration.MessageProcessor);
+
+            // Setup of dequeueing for the write-behind cache
+            this.queueClient.DequeueAndProcess(
+                cacheConfiguration.QueueConfiguration.MaxProcessingRate,
+                cacheConfiguration.QueueConfiguration.MaxBackgroundTasks,
+                queyeProcessorhandler,
+                cacheConfiguration.QueueConfiguration.CancellationToken,
+                cacheConfiguration.QueueConfiguration.BatchSize,
+                cacheConfiguration.QueueConfiguration.PollIntervalMillis,
+                cacheConfiguration.QueueConfiguration.MaxProcessingAttempts
+            );
         }
 
         /// <summary>
@@ -312,40 +346,12 @@ namespace Beztek.Facade.Cache
 
                 if (result != null)
                 {
-                    IEtagEntity currObject = value as IEtagEntity;
-                    if (currObject != null)
+                    if (!TryPrepareEtagReplacement(result, value, out T earlyReturn))
                     {
-                        // Check if the value has actually changed, otherwise do not write unnecessarilly
-                        if (object.Equals(result, value))
-                        {
-                            // Nothing to store, since the value is not changed
-                            return value;
-                        }
-
-                        if (!string.Equals(((IEtagEntity)result).Etag, currObject.Etag, StringComparison.Ordinal))
-                        {
-                            throw new ConcurrencyException("Object was already updated first");
-                        }
-
-                        // Sequential etag for all IEtagEntity types (same format write-through / write-behind).
-                        currObject.Etag = EtagUtil.GenerateEtag();
+                        return earlyReturn;
                     }
 
-                    WriteBehindMessage writeBehindMessage = this.CacheType == CacheType.WriteBehind
-                        ? BuildWriteBehindMessage(key, WriteType.Update, value)
-                        : null;
-                    this.CacheProvider.Put(key, value);
-
-                    switch (this.CacheType)
-                    {
-                        case CacheType.WriteThrough:
-                            await this.PersistenceService.UpdateAsync(key, value).ConfigureAwait(false);
-                            break;
-
-                        case CacheType.WriteBehind:
-                            await this.queueClient.Enqueue(writeBehindMessage, true).ConfigureAwait(false);
-                            break;
-                    }
+                    await PersistReplacementAsync(key, value).ConfigureAwait(false);
                 }
 
                 return result;
@@ -363,6 +369,54 @@ namespace Beztek.Facade.Cache
                 string message = $"Error occurred during GetAndReplaceAsync. Key: {key}";
                 this.Logger?.LogError(e, message);
                 throw new IOException(message, e);
+            }
+        }
+
+        /// <summary>
+        /// Validates etag concurrency and stamps a new sequential etag when replacing an <see cref="IEtagEntity"/>.
+        /// Returns <c>false</c> with <paramref name="earlyReturn"/> when the value is unchanged.
+        /// </summary>
+        private static bool TryPrepareEtagReplacement<T>(T existing, T value, out T earlyReturn)
+        {
+            earlyReturn = default;
+            if (value is not IEtagEntity currObject)
+            {
+                return true;
+            }
+
+            // Check if the value has actually changed, otherwise do not write unnecessarilly
+            if (object.Equals(existing, value))
+            {
+                earlyReturn = value;
+                return false;
+            }
+
+            if (!string.Equals(((IEtagEntity)existing).Etag, currObject.Etag, StringComparison.Ordinal))
+            {
+                throw new ConcurrencyException("Object was already updated first");
+            }
+
+            // Sequential etag for all IEtagEntity types (same format write-through / write-behind).
+            currObject.Etag = EtagUtil.GenerateEtag();
+            return true;
+        }
+
+        private async Task PersistReplacementAsync<T>(string key, T value)
+        {
+            WriteBehindMessage writeBehindMessage = this.CacheType == CacheType.WriteBehind
+                ? BuildWriteBehindMessage(key, WriteType.Update, value)
+                : null;
+            this.CacheProvider.Put(key, value);
+
+            switch (this.CacheType)
+            {
+                case CacheType.WriteThrough:
+                    await this.PersistenceService.UpdateAsync(key, value).ConfigureAwait(false);
+                    break;
+
+                case CacheType.WriteBehind:
+                    await this.queueClient.Enqueue(writeBehindMessage, true).ConfigureAwait(false);
+                    break;
             }
         }
 
@@ -484,7 +538,7 @@ namespace Beztek.Facade.Cache
                 }
                 catch (Exception e)
                 {
-                    string message = "Error occurred when flushing the cache. Ke";
+                    string message = "Error occurred when flushing the cache.";
                     this.Logger?.LogError(e, message);
                     throw new IOException(message, e);
                 }

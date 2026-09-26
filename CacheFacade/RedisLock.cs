@@ -11,37 +11,25 @@ namespace Beztek.Facade.Cache
     /// </summary>
     internal class RedisLock : IDistributedLock
     {
-        private readonly RedLockFactory redlockFactory;
+        private readonly Func<string, TimeSpan, TimeSpan, TimeSpan, IRedLock> createLock;
 
         internal RedisLock(RedLockFactory redlockFactory)
+            : this(CreateViaFactory(redlockFactory))
         {
-            this.redlockFactory = redlockFactory ?? throw new ArgumentNullException(nameof(redlockFactory));
+        }
+
+        /// <summary>Test constructor — injects the RedLock create delegate without a live multiplexer.</summary>
+        internal RedisLock(Func<string, TimeSpan, TimeSpan, TimeSpan, IRedLock> createLock)
+        {
+            this.createLock = createLock ?? throw new ArgumentNullException(nameof(createLock));
         }
 
         public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
         {
-            if (string.IsNullOrEmpty(lockName))
-            {
-                throw new ArgumentException("Lock name is required.", nameof(lockName));
-            }
-
-            if (timeoutMillis < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(timeoutMillis));
-            }
-
-            if (lockTimeMillis <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(lockTimeMillis));
-            }
-
-            if (retryIntervalMillis <= 0)
-            {
-                retryIntervalMillis = 1;
-            }
+            retryIntervalMillis = DistributedLockArgs.Normalize(lockName, timeoutMillis, lockTimeMillis, retryIntervalMillis);
 
             // RedLock CreateLock(resource, expiryTime, waitTime, retryTime)
-            IRedLock redlock = this.redlockFactory.CreateLock(
+            IRedLock redlock = this.createLock(
                 lockName,
                 TimeSpan.FromMilliseconds(lockTimeMillis),
                 TimeSpan.FromMilliseconds(timeoutMillis),
@@ -54,6 +42,16 @@ namespace Beztek.Facade.Cache
             }
 
             return redlock;
+        }
+
+        private static Func<string, TimeSpan, TimeSpan, TimeSpan, IRedLock> CreateViaFactory(RedLockFactory redlockFactory)
+        {
+            if (redlockFactory == null)
+            {
+                throw new ArgumentNullException(nameof(redlockFactory));
+            }
+
+            return (name, expiry, wait, retry) => redlockFactory.CreateLock(name, expiry, wait, retry);
         }
     }
 }

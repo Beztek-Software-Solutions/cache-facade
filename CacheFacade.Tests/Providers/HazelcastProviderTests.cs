@@ -68,5 +68,14 @@ namespace Beztek.Facade.Cache.Tests
             Assert.That(this.provider.Clear(), Is.True);
             this.map.Verify(m => m.ClearAsync(), Times.Once);
         }
+
+        [Test]
+        public async Task DisposeAsync_DisposesMap_WhenNotOwningClient()
+        {
+            this.map.Setup(m => m.DisposeAsync()).Returns(ValueTask.CompletedTask);
+            await this.provider.DisposeAsync();
+            this.map.Verify(m => m.DisposeAsync(), Times.Once);
+        }
     }
 }
+

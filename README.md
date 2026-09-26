@@ -11,15 +11,25 @@ Unified .NET caching facade (`Beztek.Facade.Cache`) over Redis, Dragonfly, KeyDB
 
 ## Quick start
 
+
 ```bash
+make test
+make test-unit
+make test-live   # requires CACHEFACADE_LIVE_PROVIDERS
+make coverage
+make coverage-html
 dotnet restore cache-facade.sln
 dotnet build cache-facade.sln
 dotnet test CacheFacade.Tests/Beztek.Facade.Cache.Tests.csproj
 ```
 
+`make test`, `make test-live`, and `make coverage` serialize on `flock --close .dotnet-build.lock` so parallel make targets do not race shared `bin/` outputs. `--close` drops the lock FD after acquire so MSBuild node-reuse workers cannot inherit and hold the lock. Do **not** wrap `make …` in another outer `flock` on the same file — that deadlocks.
+
 With coverage (Coverlet; target ≥ 85% line coverage):
 
 ```bash
+make coverage-html
+# or:
 dotnet test CacheFacade.Tests/Beztek.Facade.Cache.Tests.csproj \
   /p:CollectCoverage=true \
   /p:CoverletOutputFormat=cobertura \
@@ -39,16 +49,17 @@ Uses the **Docker Engine API**. Prefer **Podman** (rootless): the suite auto-det
 
 ```bash
 # One provider
+make test-live CACHEFACADE_LIVE_PROVIDERS=redis
+# or:
 CACHEFACADE_LIVE_PROVIDERS=redis \
   dotnet test CacheFacade.Tests/Beztek.Facade.Cache.Tests.csproj --filter Category=Live
 
 # Several providers
 CACHEFACADE_LIVE_PROVIDERS=redis,memcached,localmemory \
-  dotnet test CacheFacade.Tests/Beztek.Facade.Cache.Tests.csproj --filter Category=Live
+  make test-live
 
 # Every provider (LocalMemory in-process + containers for the rest)
-CACHEFACADE_LIVE_PROVIDERS=all \
-  dotnet test CacheFacade.Tests/Beztek.Facade.Cache.Tests.csproj --filter Category=Live
+CACHEFACADE_LIVE_PROVIDERS=all make test-live
 ```
 
 Aliases: `localmemory`/`local`, `redis`, `dragonfly`/`df`, `keydb`, `valkey`/`vk`, `garnet`, `memcached`/`mc`, `hazelcast`/`hz`, `all`.

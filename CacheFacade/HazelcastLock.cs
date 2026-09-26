@@ -36,25 +36,7 @@ namespace Beztek.Facade.Cache
 
         public IDisposable AcquireLock(string lockName, long timeoutMillis, long lockTimeMillis, int retryIntervalMillis)
         {
-            if (string.IsNullOrEmpty(lockName))
-            {
-                throw new ArgumentException("Lock name is required.", nameof(lockName));
-            }
-
-            if (timeoutMillis < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(timeoutMillis));
-            }
-
-            if (lockTimeMillis <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(lockTimeMillis));
-            }
-
-            if (retryIntervalMillis <= 0)
-            {
-                retryIntervalMillis = 1;
-            }
+            retryIntervalMillis = DistributedLockArgs.Normalize(lockName, timeoutMillis, lockTimeMillis, retryIntervalMillis);
 
             TimeSpan lease = TimeSpan.FromMilliseconds(lockTimeMillis);
             byte[] acquiredToken = Encoding.UTF8.GetBytes(Guid.NewGuid().ToString("N"));
@@ -88,6 +70,12 @@ namespace Beztek.Facade.Cache
                 return;
             }
 
+            TryRelease();
+            GC.SuppressFinalize(this);
+        }
+
+        private void TryRelease()
+        {
             try
             {
                 // Compare-and-remove: only deletes if the value still matches our token.
@@ -97,8 +85,6 @@ namespace Beztek.Facade.Cache
             {
                 // Best-effort; lease TTL will release if unlock fails.
             }
-
-            GC.SuppressFinalize(this);
         }
 
         private static T Await<T>(Task<T> task) => task.ConfigureAwait(false).GetAwaiter().GetResult();

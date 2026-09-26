@@ -1,4 +1,4 @@
-﻿// Copyright (c) Beztek Software Solutions. All rights reserved.
+// Copyright (c) Beztek Software Solutions. All rights reserved.
 
 namespace Beztek.Facade.Cache
 {
@@ -48,9 +48,22 @@ namespace Beztek.Facade.Cache
         /// Drains write-behind messages from the queue snapshot (intent + value + sequence).
         /// Does not read the live cache. Create/update map to upsert. When <typeparamref name="T"/>
         /// implements <see cref="IWriteBehindEntity"/>, deletes are soft-upserts that retain the
-        /// sequential etag clock (OpenSearch soft-delete analogue).
+        /// sequential etag clock.
         /// </summary>
         public virtual async Task<List<bool>> Process(List<Message> messageList)
+        {
+            Dictionary<string, WriteBehindMessage> winnersById = SelectLatestById(messageList);
+            BuildPersistenceBatch(winnersById, out List<PersistenceAction> actions, out Dictionary<string, object> items);
+
+            if (actions.Count > 0)
+            {
+                await this.GetCache().PersistenceService.BatchPersistAsync(actions, items).ConfigureAwait(false);
+            }
+
+            return Enumerable.Repeat(true, messageList.Count).ToList();
+        }
+
+        private Dictionary<string, WriteBehindMessage> SelectLatestById(List<Message> messageList)
         {
             Dictionary<string, WriteBehindMessage> winnersById = new Dictionary<string, WriteBehindMessage>(StringComparer.Ordinal);
 
@@ -62,71 +75,83 @@ namespace Beztek.Facade.Cache
                     continue;
                 }
 
-                if (!winnersById.TryGetValue(writeBehindMessage.Id, out WriteBehindMessage existing))
-                {
-                    winnersById[writeBehindMessage.Id] = writeBehindMessage;
-                    continue;
-                }
-
-                if (writeBehindMessage.Sequence >= existing.Sequence)
-                {
-                    this.GetCache().FacadeLogger?.LogDebug(
-                        "Write-behind discarded queued snapshot for {CacheKey} (not latest in batch): sequence {DiscardedSequence} <= {KeptSequence}",
-                        existing.Id,
-                        existing.Sequence,
-                        writeBehindMessage.Sequence);
-                    winnersById[writeBehindMessage.Id] = writeBehindMessage;
-                }
-                else
-                {
-                    this.GetCache().FacadeLogger?.LogDebug(
-                        "Write-behind discarded queued snapshot for {CacheKey} (not latest in batch): sequence {DiscardedSequence} < {KeptSequence}",
-                        writeBehindMessage.Id,
-                        writeBehindMessage.Sequence,
-                        existing.Sequence);
-                }
+                ConsiderCandidate(winnersById, writeBehindMessage);
             }
 
-            List<PersistenceAction> uniquePersistenceActionList = new List<PersistenceAction>();
-            Dictionary<string, object> actionableItems = new Dictionary<string, object>(StringComparer.Ordinal);
+            return winnersById;
+        }
+
+        private void ConsiderCandidate(Dictionary<string, WriteBehindMessage> winnersById, WriteBehindMessage candidate)
+        {
+            if (!winnersById.TryGetValue(candidate.Id, out WriteBehindMessage existing))
+            {
+                winnersById[candidate.Id] = candidate;
+                return;
+            }
+
+            if (candidate.Sequence >= existing.Sequence)
+            {
+                LogDiscarded(existing.Id, existing.Sequence, candidate.Sequence, keptIsCandidate: true);
+                winnersById[candidate.Id] = candidate;
+                return;
+            }
+
+            LogDiscarded(candidate.Id, candidate.Sequence, existing.Sequence, keptIsCandidate: false);
+        }
+
+        private void LogDiscarded(string id, long discardedSequence, long keptSequence, bool keptIsCandidate)
+        {
+            // Message text differs only for log clarity; both paths discard the older snapshot.
+            string format = keptIsCandidate
+                ? "Write-behind discarded queued snapshot for {CacheKey} (not latest in batch): sequence {DiscardedSequence} <= {KeptSequence}"
+                : "Write-behind discarded queued snapshot for {CacheKey} (not latest in batch): sequence {DiscardedSequence} < {KeptSequence}";
+
+            this.GetCache().FacadeLogger?.LogDebug(format, id, discardedSequence, keptSequence);
+        }
+
+        private static void BuildPersistenceBatch(
+            Dictionary<string, WriteBehindMessage> winnersById,
+            out List<PersistenceAction> actions,
+            out Dictionary<string, object> items)
+        {
+            actions = new List<PersistenceAction>();
+            items = new Dictionary<string, object>(StringComparer.Ordinal);
 
             foreach (WriteBehindMessage winner in winnersById.Values)
             {
                 if (winner.WriteType == WriteType.Delete)
                 {
-                    if (SupportsWriteBehindEntity)
-                    {
-                        T tombstone = BuildSoftDeleteSnapshot(winner);
-                        if (tombstone == null)
-                        {
-                            continue;
-                        }
-
-                        uniquePersistenceActionList.Add(new PersistenceAction(winner.Id, WriteType.Upsert));
-                        actionableItems[winner.Id] = tombstone;
-                    }
-                    else
-                    {
-                        uniquePersistenceActionList.Add(new PersistenceAction(winner.Id, WriteType.Delete));
-                        actionableItems[winner.Id] = default(T);
-                    }
-
+                    TryAddDeleteAction(winner, actions, items);
                     continue;
                 }
 
                 T value = CoerceValue(winner.Value);
                 ApplyWriteBehindMetadata(value, winner.Sequence, isDeleted: false);
-
-                uniquePersistenceActionList.Add(new PersistenceAction(winner.Id, WriteType.Upsert));
-                actionableItems[winner.Id] = value;
+                actions.Add(new PersistenceAction(winner.Id, WriteType.Upsert));
+                items[winner.Id] = value;
             }
+        }
 
-            if (uniquePersistenceActionList.Count > 0)
+        private static void TryAddDeleteAction(
+            WriteBehindMessage winner,
+            List<PersistenceAction> actions,
+            Dictionary<string, object> items)
+        {
+            if (SupportsWriteBehindEntity)
             {
-                await this.GetCache().PersistenceService.BatchPersistAsync(uniquePersistenceActionList, actionableItems).ConfigureAwait(false);
+                T tombstone = BuildSoftDeleteSnapshot(winner);
+                if (tombstone == null)
+                {
+                    return;
+                }
+
+                actions.Add(new PersistenceAction(winner.Id, WriteType.Upsert));
+                items[winner.Id] = tombstone;
+                return;
             }
 
-            return Enumerable.Repeat(true, messageList.Count).ToList();
+            actions.Add(new PersistenceAction(winner.Id, WriteType.Delete));
+            items[winner.Id] = default(T);
         }
 
         private static T BuildSoftDeleteSnapshot(WriteBehindMessage winner)
@@ -134,20 +159,29 @@ namespace Beztek.Facade.Cache
             T value = CoerceValue(winner.Value);
             if (value == null)
             {
-                try
-                {
-                    value = Activator.CreateInstance<T>();
-                }
-                catch (MissingMethodException)
+                value = TryCreateEmptyInstance(winner.Id);
+                if (value == null)
                 {
                     return default;
                 }
-
-                IdProperty?.SetValue(value, winner.Id);
             }
 
             ApplyWriteBehindMetadata(value, winner.Sequence, isDeleted: true);
             return value;
+        }
+
+        private static T TryCreateEmptyInstance(string id)
+        {
+            try
+            {
+                T value = Activator.CreateInstance<T>();
+                IdProperty?.SetValue(value, id);
+                return value;
+            }
+            catch (MissingMethodException)
+            {
+                return default;
+            }
         }
 
         private static void ApplyWriteBehindMetadata(T value, long sequence, bool isDeleted)
@@ -188,15 +222,20 @@ namespace Beztek.Facade.Cache
 
             if (value is JsonElement jsonElement)
             {
-                if (jsonElement.ValueKind == JsonValueKind.Null || jsonElement.ValueKind == JsonValueKind.Undefined)
-                {
-                    return default;
-                }
-
-                return jsonElement.Deserialize<T>();
+                return CoerceJsonElement(jsonElement);
             }
 
             return SerializationUtil.JsonDeserialize<T>(Convert.ToString(value));
+        }
+
+        private static T CoerceJsonElement(JsonElement jsonElement)
+        {
+            if (jsonElement.ValueKind == JsonValueKind.Null || jsonElement.ValueKind == JsonValueKind.Undefined)
+            {
+                return default;
+            }
+
+            return jsonElement.Deserialize<T>();
         }
 
         private Cache GetCache()

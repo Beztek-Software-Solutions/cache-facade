@@ -3,8 +3,8 @@
 namespace Beztek.Facade.Cache
 {
     /// <summary>
-    /// Write-behind queue payload carrying the operation intent and a snapshot of the value.
-    /// Patterned after production OpenSearch CDC outbox rows (operation + payload + timestamp).
+    /// Write-behind queue payload carrying the operation intent and a snapshot of the value
+    /// (operation + payload + sequence timestamp).
     /// <para>
     /// The legacy write-behind message was just the cache key, which forced <see cref="CacheWriteBehindProcessor{T}"/>
     /// to infer the intent (create/update/delete) from the live cache and DB state at drain time. That inference is

@@ -5,4 +5,8 @@ CacheFacade/obj/*
 CacheFacade.Tests/bin/*
 CacheFacade.Tests/obj/*
 CacheFacade.Tests/coverage/*
+coverage/
+
+# Makefile flock for concurrent make test / coverage / test-live
+.dotnet-build.lock
 

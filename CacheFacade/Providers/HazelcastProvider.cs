@@ -19,6 +19,10 @@ namespace Beztek.Facade.Cache.Providers
         private readonly TimeSpan timeToLive;
         private readonly bool ownsClient;
 
+        /// <summary>
+        /// Connects to a live Hazelcast cluster. Covered by live Hazelcast tests.
+        /// </summary>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
         public HazelcastProvider(HazelcastProviderConfiguration configuration)
         {
             if (configuration == null)
@@ -76,12 +80,20 @@ namespace Beztek.Facade.Cache.Providers
                 await this.map.DisposeAsync().ConfigureAwait(false);
             }
 
+            await DisposeOwnedClientAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>Disposes the owned Hazelcast client when this provider started it.</summary>
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
+        private async ValueTask DisposeOwnedClientAsync()
+        {
             if (this.ownsClient && this.client != null)
             {
                 await this.client.DisposeAsync().ConfigureAwait(false);
             }
         }
 
+        [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
         private static IHazelcastClient StartClient(HazelcastProviderConfiguration configuration)
         {
             return HazelcastClientFactory.StartNewClientAsync(options =>

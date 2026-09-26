@@ -3,7 +3,7 @@
 namespace Beztek.Facade.Cache
 {
     /// <summary>
-    /// Entity contract for robust write-behind persistence (OpenSearch CDC-style last-write-wins).
+    /// Entity contract for robust write-behind persistence (last-write-wins with soft-delete tombstones).
     /// <b>Recommended for write-behind caches.</b> Write-through can use <see cref="IEtagEntity"/> alone.
     /// <para>
     /// Extends <see cref="IEtagEntity"/>. <see cref="IEtagEntity.Etag"/> is always a short sequential string
@@ -22,7 +22,8 @@ namespace Beztek.Facade.Cache
     public interface IWriteBehindEntity : IEtagEntity
     {
         /// <summary>
-        /// Soft-delete tombstone (OpenSearch <c>_deleted</c> analogue).
+        /// Soft-delete tombstone. When true, the row remains so the sequential etag
+        /// clock survives; readers treat it as missing.
         /// </summary>
         bool IsDeleted { get; set; }
     }

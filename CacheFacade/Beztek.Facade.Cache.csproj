@@ -4,14 +4,14 @@
 	  <TargetFramework>net9.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <id>Beztek.Facade.Cache</id>
-    <version>1.7.3</version>
+    <version>1.7.4</version>
     <authors>Peter Thomas</authors>
     <owners>Beztek Software Solutions</owners>
     <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Beztek-Software-Solutions/cache-facade</projectUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>API facade over various distributed and non-distributed caches</description>
-    <releaseNotes>Safer locks/clear; configurable lock timeouts; dispose providers; share Redis multiplexer with RedLock.</releaseNotes>
+    <releaseNotes>Beztek.Facade.Queue 1.2.0 (write-behind may use any queue-facade provider) and Beztek.Facade.Sql 1.4.1. Pins MessagePack 3.1.10 and AWSSDK.Core 4.0.102.7 for known GHSA advisories. Make targets use flock --close and non-blocking coverage-html.</releaseNotes>
     <copyright>Copyright 2023, Beztek Software Solutions</copyright>
     <tags>Beztek.Facade.Cache;cache-facade;CacheFacade</tags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -19,13 +19,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Beztek.Facade.Queue" Version="1.1.1" />
-    <PackageReference Include="Beztek.Facade.Sql" Version="1.4.0" />
+    <PackageReference Include="Beztek.Facade.Queue" Version="1.2.0" />
+    <PackageReference Include="Beztek.Facade.Sql" Version="1.4.1" />
     <PackageReference Include="Hazelcast.Net" Version="5.7.0" />
     <PackageReference Include="EnyimMemcachedCore" Version="3.5.1" />
     <!-- EnyimMemcachedCore pins MessagePack 3.1.4 (NU190x / GHSA-382j-8mxh-c7x2 et al.);
-         force the patched line. -->
-    <PackageReference Include="MessagePack" Version="3.1.9" />
+         force the patched line. Keep this direct reference when bumping Enyim. -->
+    <PackageReference Include="MessagePack" Version="3.1.10" />
+    <!-- Keep AWSSDK.Core on the patched line even if a transitive dips (NU190x / GHSA-9cvc-h2w8-phrp). -->
+    <PackageReference Include="AWSSDK.Core" Version="4.0.102.7" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.12" />
     <PackageReference Include="StackExchange.Redis" Version="3.3.1" />
     <PackageReference Include="System.Runtime.Caching" Version="10.0.12" />
@@ -37,6 +39,9 @@
     <None Include="README.md" Pack="true" PackagePath="" />
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>Beztek.Facade.Cache.Tests</_Parameter1>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
 
