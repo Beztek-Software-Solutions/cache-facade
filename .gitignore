@@ -1,12 +1,20 @@
-.vscode/*
-.vs/*
-CacheFacade/bin/*
-CacheFacade/obj/*
-CacheFacade.Tests/bin/*
-CacheFacade.Tests/obj/*
-CacheFacade.Tests/coverage/*
+.vscode/
+.vs/
+bin/
+obj/
+**/bin/
+**/obj/
 coverage/
+**/coverage/
+TestResults/
+**/TestResults/
+nupkg/
+**/nupkg/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+.DS_Store
 
 # Makefile flock for concurrent make test / coverage / test-live
 .dotnet-build.lock
-
