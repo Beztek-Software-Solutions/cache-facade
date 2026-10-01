@@ -59,8 +59,29 @@ namespace Beztek.Facade.Cache.Tests
             Assert.That(config.ProviderType, Is.EqualTo(CacheProviderType.Valkey));
             Assert.That(config.Endpoint, Is.EqualTo("127.0.0.1:6379"));
             Assert.That(config.CacheName, Is.EqualTo("orders"));
+            Assert.That(config.Password, Is.EqualTo(""));
             Assert.That(config, Is.InstanceOf<RedisProviderConfiguration>());
             Assert.That(config.DistributedLockKind, Is.EqualTo(RedisDistributedLockKind.RedLock));
+        }
+
+        [Test]
+        public void ValkeyProviderConfiguration_SupportsIamCredentialsProvider()
+        {
+            var config = new ValkeyProviderConfiguration(
+                "master.example.cache.amazonaws.com:6379",
+                password: "",
+                cacheName: "orders",
+                useSSL: true)
+            {
+                User = "grasp-api",
+                CredentialsProvider = () => new RedisCredentials("grasp-api", "iam-token"),
+            };
+
+            Assert.That(config.User, Is.EqualTo("grasp-api"));
+            Assert.That(config.CredentialsProvider, Is.Not.Null);
+            Assert.That(config.CredentialsProvider!(), Is.EqualTo(new RedisCredentials("grasp-api", "iam-token")));
+            Assert.That(config.UseSSL, Is.True);
+            Assert.That(config.Password, Is.Empty);
         }
 
         [Test]

@@ -11,7 +11,11 @@ namespace Beztek.Facade.Cache
         /// Initializes a new instance of the <see cref="RedisProviderConfiguration"/> class.
         /// </summary>
         /// <param name="endpoint">Redis server host:port.</param>
-        /// <param name="password">Redis server password (may be empty).</param>
+        /// <param name="password">
+        /// Redis server password. May be empty for password-less servers (no
+        /// <c>requirepass</c>) or when <see cref="CredentialsProvider"/> supplies
+        /// credentials (e.g. ElastiCache IAM tokens).
+        /// </param>
         /// <param name="cacheName">Logical cache name used as the <see cref="CacheFactory"/> registry key.</param>
         /// <param name="useSSL">Whether to use SSL/TLS for the Redis connection.</param>
         /// <param name="abortConnection">Whether to abort on connect failure (StackExchange.Redis <c>AbortOnConnectFail</c>).</param>
@@ -21,7 +25,7 @@ namespace Beztek.Facade.Cache
         {
             this.CacheName = cacheName;
             this.Endpoint = endpoint;
-            this.Password = password;
+            this.Password = password ?? string.Empty;
             this.UseSSL = useSSL;
             this.AbortConnection = abortConnection;
 
@@ -40,8 +44,26 @@ namespace Beztek.Facade.Cache
         /// <summary>Whether connection attempts abort on failure.</summary>
         public bool AbortConnection { get; }
 
-        /// <summary>Redis server password.</summary>
+        /// <summary>
+        /// Static Redis / Valkey AUTH password. Empty for password-less hosts.
+        /// Ignored when <see cref="CredentialsProvider"/> is set.
+        /// </summary>
         public string Password { get; }
+
+        /// <summary>
+        /// Optional ACL / ElastiCache user name (Redis 6+ <c>AUTH user password</c>).
+        /// Required for Amazon ElastiCache IAM authentication. Ignored when
+        /// <see cref="CredentialsProvider"/> returns a user.
+        /// </summary>
+        public string User { get; set; }
+
+        /// <summary>
+        /// When set, invoked to obtain username/password (or IAM token) for each
+        /// AUTH handshake, including reconnects. Prefer this over a static
+        /// <see cref="Password"/> for short-lived cloud credentials. See README
+        /// “Password-less and IAM authentication”.
+        /// </summary>
+        public RedisCredentialsProvider CredentialsProvider { get; set; }
 
         /// <inheritdoc />
         public CacheProviderType ProviderType { get; set; }

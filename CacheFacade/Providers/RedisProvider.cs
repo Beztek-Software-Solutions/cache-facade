@@ -104,25 +104,55 @@ namespace Beztek.Facade.Cache.Providers
         /// <summary>Builds the shared-multiplexer dictionary key from connection identity fields.</summary>
         internal static string BuildConnectionKey(RedisProviderConfiguration configuration)
         {
+            // Do not include static password or IAM tokens — rotating credentials
+            // must not create a new multiplexer key per token. User + provider flag
+            // distinguish ACL identities.
+            string credentialsIdentity = configuration.CredentialsProvider != null
+                ? "credentials-provider"
+                : (configuration.Password ?? "");
+
             return string.Join(
                 "|",
                 configuration.Endpoint ?? "",
-                configuration.Password ?? "",
+                configuration.User ?? "",
+                credentialsIdentity,
                 configuration.UseSSL,
                 configuration.AbortConnection,
                 configuration.Options ?? "");
         }
 
-        private static ConfigurationOptions BuildConfigurationOptions(RedisProviderConfiguration redisCacheConfiguration)
+        /// <summary>
+        /// Maps <see cref="RedisProviderConfiguration"/> onto StackExchange.Redis
+        /// options. Empty password is valid (password-less). A
+        /// <see cref="RedisCredentialsProvider"/> is wired through
+        /// <c>ConfigurationOptions.Defaults</c> so reconnect AUTH can refresh IAM tokens.
+        /// </summary>
+        internal static ConfigurationOptions BuildConfigurationOptions(RedisProviderConfiguration redisCacheConfiguration)
         {
             ConfigurationOptions connectionConfig = string.IsNullOrWhiteSpace(redisCacheConfiguration.Options) ?
                 new ConfigurationOptions() : ConfigurationOptions.Parse(redisCacheConfiguration.Options);
 
-            connectionConfig.Password = redisCacheConfiguration.Password;
             connectionConfig.Ssl = redisCacheConfiguration.UseSSL;
             connectionConfig.AbortOnConnectFail = redisCacheConfiguration.AbortConnection;
             connectionConfig.AllowAdmin = true;
             connectionConfig.EndPoints.Add(redisCacheConfiguration.Endpoint);
+
+            if (redisCacheConfiguration.CredentialsProvider != null)
+            {
+                connectionConfig.Defaults = new RedisCredentialsDefaultsProvider(
+                    redisCacheConfiguration.CredentialsProvider);
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(redisCacheConfiguration.User))
+                {
+                    connectionConfig.User = redisCacheConfiguration.User;
+                }
+
+                // Empty password = password-less AUTH (local Valkey / no requirepass).
+                connectionConfig.Password = redisCacheConfiguration.Password;
+            }
+
             return connectionConfig;
         }
 
