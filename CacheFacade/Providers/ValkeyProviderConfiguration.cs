@@ -12,12 +12,12 @@ namespace Beztek.Facade.Cache
     /// <c>useSSL: false</c> (compose / Testcontainers without <c>requirepass</c>).
     /// </para>
     /// <para>
-    /// <b>Amazon ElastiCache IAM auth:</b> set <see cref="RedisProviderConfiguration.User"/>
-    /// to the ElastiCache IAM-mode user name, <c>useSSL: true</c>, leave
+    /// <b>Amazon ElastiCache IAM auth:</b> set <c>useSSL: true</c>, leave
     /// <c>password</c> empty, and set
     /// <see cref="RedisProviderConfiguration.CredentialsProvider"/> to mint a
-    /// SigV4 IAM authentication token as <see cref="RedisCredentials.Password"/>.
-    /// Tokens expire (~15 minutes); the provider is re-invoked on reconnect AUTH.
+    /// SigV4 token. Prefer <see cref="RedisCredentials"/> with
+    /// <see cref="RedisCredentials.ExpiresAt"/> so the facade caches until near
+    /// expiry; the two-argument form remints on every AUTH.
     /// </para>
     /// </remarks>
     public class ValkeyProviderConfiguration : RedisProviderConfiguration

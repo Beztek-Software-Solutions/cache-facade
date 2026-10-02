@@ -68,6 +68,8 @@ Aliases: `localmemory`/`local`, `redis`, `dragonfly`/`df`, `keydb`, `valkey`/`vk
 
 Install the package and follow [CacheFacade/README.md](CacheFacade/README.md) for initialization samples, entity contracts (`IEtagEntity` is sufficient unless using write-behind, which needs soft delete via `IWriteBehindEntity`), and write-behind drain rules.
 
+**Rotating Redis/Valkey passwords (ElastiCache IAM):** [Password-less and IAM authentication](CacheFacade/README.md#password-less-and-iam-authentication) — optional `ExpiresAt` on `RedisCredentials` caches until near expiry; two-arg `(user, password)` unchanged.
+
 ```bash
 dotnet add package Beztek.Facade.Cache
 ```

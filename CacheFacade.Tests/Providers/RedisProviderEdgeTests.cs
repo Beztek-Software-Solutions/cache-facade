@@ -101,7 +101,49 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
-        public void BuildConfigurationOptions_CredentialsProvider_UsesDefaultsForRefreshableAuth()
+        public void BuildConfigurationOptions_CredentialsProvider_CachesUntilNearExpiry()
+        {
+            var calls = 0;
+            var start = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+            var time = new ManualTimeProvider(start);
+            var config = new ValkeyProviderConfiguration(
+                "master.example.cache.amazonaws.com:6379",
+                password: "",
+                cacheName: "orders",
+                useSSL: true)
+            {
+                TimeProvider = time,
+                PasswordRefreshSkew = TimeSpan.FromMinutes(2),
+                CredentialsProvider = () =>
+                {
+                    calls++;
+                    return new RedisCredentials(
+                        "grasp-api",
+                        $"token-{calls}",
+                        time.GetUtcNow().AddMinutes(15));
+                },
+            };
+
+            var options = RedisProvider.BuildConfigurationOptions(config);
+            Assert.That(options.Defaults, Is.Not.Null);
+            Assert.That(options.User, Is.EqualTo("grasp-api"));
+            Assert.That(options.Password, Is.EqualTo("token-1"));
+            Assert.That(options.User, Is.EqualTo("grasp-api"));
+            Assert.That(options.Password, Is.EqualTo("token-1"));
+            Assert.That(calls, Is.EqualTo(1));
+
+            time.Advance(TimeSpan.FromMinutes(12));
+            Assert.That(options.Password, Is.EqualTo("token-1"));
+            Assert.That(calls, Is.EqualTo(1));
+
+            time.Advance(TimeSpan.FromMinutes(2));
+            Assert.That(options.User, Is.EqualTo("grasp-api"));
+            Assert.That(options.Password, Is.EqualTo("token-2"));
+            Assert.That(calls, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void BuildConfigurationOptions_CredentialsProvider_WithoutExpiresAt_RemintsEachAuth()
         {
             var calls = 0;
             var config = new ValkeyProviderConfiguration(
@@ -110,7 +152,6 @@ namespace Beztek.Facade.Cache.Tests
                 cacheName: "orders",
                 useSSL: true)
             {
-                User = "grasp-api",
                 CredentialsProvider = () =>
                 {
                     calls++;
@@ -119,14 +160,33 @@ namespace Beztek.Facade.Cache.Tests
             };
 
             var options = RedisProvider.BuildConfigurationOptions(config);
-            Assert.That(options.Defaults, Is.Not.Null);
-            // User + Password from one AUTH share a snapshot (one mint).
             Assert.That(options.User, Is.EqualTo("grasp-api"));
             Assert.That(options.Password, Is.EqualTo("token-1"));
-            // Next AUTH remints.
             Assert.That(options.User, Is.EqualTo("grasp-api"));
             Assert.That(options.Password, Is.EqualTo("token-2"));
             Assert.That(calls, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void RedisCredentials_TwoAndThreeArgForms()
+        {
+            var legacy = new RedisCredentials("user", "token");
+            Assert.That(legacy.ExpiresAt, Is.Null);
+
+            var expires = DateTimeOffset.UtcNow.AddMinutes(15);
+            var withExpiry = new RedisCredentials("user", "token", expires);
+            Assert.That(withExpiry.ExpiresAt, Is.EqualTo(expires));
+        }
+
+        private sealed class ManualTimeProvider : TimeProvider
+        {
+            private DateTimeOffset _utc;
+
+            public ManualTimeProvider(DateTimeOffset utc) => _utc = utc;
+
+            public override DateTimeOffset GetUtcNow() => _utc;
+
+            public void Advance(TimeSpan delta) => _utc += delta;
         }
 
         [Test]

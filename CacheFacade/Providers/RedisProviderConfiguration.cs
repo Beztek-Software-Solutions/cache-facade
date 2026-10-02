@@ -1,7 +1,9 @@
-﻿// Copyright (c) Beztek Software Solutions. All rights reserved.
+// Copyright (c) Beztek Software Solutions. All rights reserved.
 
 namespace Beztek.Facade.Cache
 {
+    using System;
+
     /// <summary>
     /// Defines the configuration needed for a Redis-backed cache provider.
     /// </summary>
@@ -58,12 +60,27 @@ namespace Beztek.Facade.Cache
         public string User { get; set; }
 
         /// <summary>
-        /// When set, invoked to obtain username/password (or IAM token) for each
-        /// AUTH handshake, including reconnects. Prefer this over a static
-        /// <see cref="Password"/> for short-lived cloud credentials. See README
+        /// When set, invoked to obtain short-lived username/password (or IAM
+        /// token) for AUTH, including reconnects. Credentials are cached until
+        /// <see cref="RedisCredentials.ExpiresAt"/> minus
+        /// <see cref="PasswordRefreshSkew"/>. Prefer this over a static
+        /// <see cref="Password"/> for cloud IAM. Put static secrets in
+        /// <see cref="Password"/> and omit the provider. See README
         /// “Password-less and IAM authentication”.
         /// </summary>
         public RedisCredentialsProvider CredentialsProvider { get; set; }
+
+        /// <summary>
+        /// Clock for credential-cache expiry. Defaults to
+        /// <see cref="TimeProvider.System"/>.
+        /// </summary>
+        public TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
+        /// <summary>
+        /// Refresh cached credentials this far before
+        /// <see cref="RedisCredentials.ExpiresAt"/>. Default two minutes.
+        /// </summary>
+        public TimeSpan PasswordRefreshSkew { get; set; } = TimeSpan.FromMinutes(2);
 
         /// <inheritdoc />
         public CacheProviderType ProviderType { get; set; }

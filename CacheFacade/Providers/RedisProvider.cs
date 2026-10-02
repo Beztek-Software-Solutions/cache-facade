@@ -1,4 +1,4 @@
-﻿// Copyright (c) Beztek Software Solutions. All rights reserved.
+// Copyright (c) Beztek Software Solutions. All rights reserved.
 
 namespace Beztek.Facade.Cache.Providers
 {
@@ -140,7 +140,9 @@ namespace Beztek.Facade.Cache.Providers
             if (redisCacheConfiguration.CredentialsProvider != null)
             {
                 connectionConfig.Defaults = new RedisCredentialsDefaultsProvider(
-                    redisCacheConfiguration.CredentialsProvider);
+                    redisCacheConfiguration.CredentialsProvider,
+                    redisCacheConfiguration.TimeProvider,
+                    redisCacheConfiguration.PasswordRefreshSkew);
             }
             else
             {

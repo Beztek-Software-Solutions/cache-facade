@@ -4,14 +4,14 @@
 	  <TargetFramework>net9.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <id>Beztek.Facade.Cache</id>
-    <version>1.7.6</version>
+    <version>1.7.7</version>
     <authors>Peter Thomas</authors>
     <owners>Beztek Software Solutions</owners>
     <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Beztek-Software-Solutions/cache-facade</projectUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>API facade over various distributed and non-distributed caches</description>
-    <releaseNotes>Redis/Valkey: User + RedisCredentialsProvider for password-less and ElastiCache IAM auth (reconnect-safe via ConfigurationOptions.Defaults). Beztek.Facade.Queue 1.2.1.</releaseNotes>
+    <releaseNotes>Redis/Valkey CredentialsProvider: optional ExpiresAt caches until near expiry (PasswordRefreshSkew); two-arg RedisCredentials(user, password) unchanged and remints each AUTH.</releaseNotes>
     <copyright>Copyright 2023, Beztek Software Solutions</copyright>
     <tags>Beztek.Facade.Cache;cache-facade;CacheFacade</tags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <PackageReference Include="Beztek.Facade.Queue" Version="1.2.1" />
-    <PackageReference Include="Beztek.Facade.Sql" Version="1.4.2" />
+    <PackageReference Include="Beztek.Facade.Sql" Version="1.4.3" />
     <PackageReference Include="Hazelcast.Net" Version="5.7.0" />
     <PackageReference Include="EnyimMemcachedCore" Version="3.5.1" />
     <!-- EnyimMemcachedCore pins MessagePack 3.1.4 (NU190x / GHSA-382j-8mxh-c7x2 et al.);

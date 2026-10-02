@@ -8,21 +8,32 @@ namespace Beztek.Facade.Cache.Providers
 
     /// <summary>
     /// StackExchange.Redis defaults that invoke
-    /// <see cref="RedisCredentialsProvider"/> for AUTH. User and Password from
+    /// <see cref="RedisCredentialsProvider"/> for AUTH. When
+    /// <see cref="RedisCredentials.ExpiresAt"/> is set, caches until that time
+    /// minus refresh skew; when null, remints every AUTH. User and Password from
     /// the same handshake share one snapshot so an IAM token is not minted twice
     /// (and mismatched) when the client reads both properties.
     /// </summary>
     internal sealed class RedisCredentialsDefaultsProvider : DefaultOptionsProvider
     {
         private readonly RedisCredentialsProvider _credentialsProvider;
+        private readonly TimeProvider _time;
+        private readonly TimeSpan _refreshSkew;
         private readonly object _gate = new();
         private RedisCredentials _snapshot;
+        private DateTimeOffset _refreshAfter = DateTimeOffset.MinValue;
+        private bool _hasSnapshot;
         private int _remainingReads;
 
-        public RedisCredentialsDefaultsProvider(RedisCredentialsProvider credentialsProvider)
+        public RedisCredentialsDefaultsProvider(
+            RedisCredentialsProvider credentialsProvider,
+            TimeProvider time = null,
+            TimeSpan? passwordRefreshSkew = null)
         {
             _credentialsProvider = credentialsProvider
                 ?? throw new ArgumentNullException(nameof(credentialsProvider));
+            _time = time ?? TimeProvider.System;
+            _refreshSkew = passwordRefreshSkew ?? TimeSpan.FromMinutes(2);
         }
 
         /// <inheritdoc />
@@ -38,14 +49,27 @@ namespace Beztek.Facade.Cache.Providers
         {
             lock (_gate)
             {
-                if (_remainingReads <= 0)
+                if (_remainingReads > 0)
                 {
-                    _snapshot = _credentialsProvider();
-                    // Typical AUTH reads User then Password (or vice versa).
-                    _remainingReads = 2;
+                    _remainingReads--;
+                    return _snapshot;
                 }
 
-                _remainingReads--;
+                var now = _time.GetUtcNow();
+                // Null ExpiresAt => remint every AUTH (two-arg constructor / legacy).
+                if (!_hasSnapshot
+                    || _snapshot.ExpiresAt is null
+                    || now >= _refreshAfter)
+                {
+                    _snapshot = _credentialsProvider();
+                    _refreshAfter = _snapshot.ExpiresAt is DateTimeOffset expires
+                        ? expires - _refreshSkew
+                        : DateTimeOffset.MinValue;
+                    _hasSnapshot = true;
+                }
+
+                // Typical AUTH reads User then Password (or vice versa).
+                _remainingReads = 1;
                 return _snapshot;
             }
         }

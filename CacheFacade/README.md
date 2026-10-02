@@ -184,36 +184,52 @@ Redis-protocol providers (`RedisProviderConfiguration` and subclasses including
 
 | Shape | How to configure |
 |-------|------------------|
-| **Password-less** (local Valkey/Redis without `requirepass`) | `password: ""` (default for Valkey samples). TLS usually off locally. |
-| **Static AUTH / ACL password** | Pass the password to the constructor; optional `User` for Redis 6+ ACL. |
-| **Short-lived IAM token** (e.g. Amazon ElastiCache for Valkey IAM auth) | `useSSL: true`, set `User` to the ElastiCache IAM-mode user name, leave constructor `password` empty, set `CredentialsProvider` to mint a SigV4 token as `RedisCredentials.Password`. |
+| **Password-less** (local Valkey/Redis without `requirepass`) | Constructor `password: ""`. TLS usually off locally. Do **not** set `CredentialsProvider`. |
+| **Static AUTH / ACL password** | Pass the password to the constructor; optional `User` for Redis 6+ ACL. Do **not** set `CredentialsProvider`. |
+| **Short-lived IAM token** (e.g. Amazon ElastiCache for Valkey IAM auth) | `useSSL: true`, leave constructor `password` empty, set `CredentialsProvider`. Prefer `new RedisCredentials(user, token, expiresAt)` so the facade caches until near expiry. The two-arg `new RedisCredentials(user, token)` still works and remints on every AUTH. |
 
-Example — ElastiCache IAM (token generation is host-specific; illustrated with a delegate):
+`CredentialsProvider` is for rotating credentials. When `ExpiresAt` is set, the
+facade caches until `ExpiresAt − PasswordRefreshSkew` (default skew **2 minutes**),
+then remints on the next AUTH (connect / reconnect). When `ExpiresAt` is omitted,
+each AUTH remints (compatible with older call sites). User and Password for one
+handshake share one mint. There is no background timer.
+
+This library does not call AWS (or other cloud) APIs — the host owns SigV4
+minting and IAM policy (`elasticache:Connect`).
+
+Example — ElastiCache IAM (recommended: pass expiry so tokens are cached):
 
 ```csharp
+var time = TimeProvider.System;
 var providerConfig = new ValkeyProviderConfiguration(
     endpoint: "master.my-cache.cache.amazonaws.com:6379",
     password: "",
     cacheName: "orders",
     useSSL: true)
 {
-    User = "grasp-api", // ElastiCache user with authentication_mode = IAM
-    CredentialsProvider = () => new RedisCredentials(
-        User: "grasp-api",
-        Password: MintElastiCacheIamAuthToken(/* region, endpoint, user */)),
+    TimeProvider = time,
+    PasswordRefreshSkew = TimeSpan.FromMinutes(2),
+    CredentialsProvider = () =>
+    {
+        var token = MintElastiCacheIamAuthToken(/* region, replication group, user */);
+        return new RedisCredentials(
+            User: "grasp-api",
+            Password: token,
+            ExpiresAt: time.GetUtcNow().AddMinutes(15));
+    },
 };
-
-ICache cache = CacheFactory.GetOrCreateCache(
-    new CacheConfiguration(providerConfig, CacheType.NonPersistent),
-    logger);
 ```
 
-`CredentialsProvider` is wired through StackExchange.Redis
-`ConfigurationOptions.Defaults`, so **reconnect AUTH** can obtain a fresh token
-(IAM tokens expire in about 15 minutes; long-lived connections may still need
-re-AUTH within ElastiCache’s 12-hour IAM session window). This library does not
-call AWS APIs itself — the host application owns SigV4 minting and IAM policy
-(`elasticache:Connect`).
+Compatible two-argument form (remints every AUTH, no cache):
+
+```csharp
+CredentialsProvider = () => new RedisCredentials("grasp-api", MintElastiCacheIamAuthToken(...)),
+```
+
+ElastiCache IAM tokens expire in about **15 minutes**. Long-lived multiplexers
+may still re-AUTH within ElastiCache’s broader IAM session window; with
+`ExpiresAt` set, the provider supplies a fresh token whenever AUTH runs after
+the cache window.
 
 #### Garnet
 

@@ -1,7 +1,8 @@
-﻿// Copyright (c) Beztek Software Solutions. All rights reserved.
+// Copyright (c) Beztek Software Solutions. All rights reserved.
 
 namespace Beztek.Facade.Cache.Tests
 {
+    using System;
     using Beztek.Facade.Cache;
     using NUnit.Framework;
 
@@ -79,7 +80,9 @@ namespace Beztek.Facade.Cache.Tests
 
             Assert.That(config.User, Is.EqualTo("grasp-api"));
             Assert.That(config.CredentialsProvider, Is.Not.Null);
-            Assert.That(config.CredentialsProvider!(), Is.EqualTo(new RedisCredentials("grasp-api", "iam-token")));
+            Assert.That(
+                config.CredentialsProvider!(),
+                Is.EqualTo(new RedisCredentials("grasp-api", "iam-token")));
             Assert.That(config.UseSSL, Is.True);
             Assert.That(config.Password, Is.Empty);
         }
