@@ -1,4 +1,4 @@
-﻿// Copyright (c) Beztek Software Solutions. All rights reserved.
+// Copyright (c) Beztek Software Solutions. All rights reserved.
 
 namespace Beztek.Facade.Cache
 {
@@ -84,9 +84,14 @@ namespace Beztek.Facade.Cache
 
         /// <summary>
         /// Returns paged results of typed objects for the given SQL select and pagination parameters.
-        /// Supported to the extent that <see cref="IPersistenceService.SearchIdsByQueryAsync"/> is implemented;
-        /// results are hydrated via <see cref="GetAsync{T}"/>.
+        /// Supported to the extent that <see cref="IPersistenceService.SearchIdsByQueryAsync"/> is implemented.
         /// </summary>
+        /// <remarks>
+        /// Hydrates with <see cref="PeekAsync{T}"/> hits, then <see cref="IPersistenceService.GetByIdsAsync"/>
+        /// for misses and <see cref="WarmAsync{T}"/>. <see cref="IPersistenceService.GetByIdsAsync"/> is
+        /// optional for custom persistences (interface default = N× <see cref="IPersistenceService.GetByIdAsync"/>);
+        /// <see cref="SqlPersistenceService{T}"/> overrides for a single batch SQL load (1+1).
+        /// </remarks>
         /// <typeparam name="T">Entity type.</typeparam>
         /// <param name="query">SQL select that returns entity ids (and optionally more columns).</param>
         /// <param name="pageNum">1-based page number.</param>

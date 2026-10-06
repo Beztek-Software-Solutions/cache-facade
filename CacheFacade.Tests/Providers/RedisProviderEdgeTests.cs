@@ -49,8 +49,7 @@ namespace Beztek.Facade.Cache.Tests
                 "orders",
                 useSSL: true,
                 abortConnection: false,
-                timeToLiveMillis: 1000)
-            {
+                timeToLiveMillis: 1000) {
                 User = "app-user",
                 Options = "connectTimeout=100",
             };
@@ -66,8 +65,7 @@ namespace Beztek.Facade.Cache.Tests
         [Test]
         public void BuildConnectionKey_CredentialsProvider_DoesNotEmbedToken()
         {
-            var config = new RedisProviderConfiguration("127.0.0.1:6379", "", "orders", useSSL: true)
-            {
+            var config = new RedisProviderConfiguration("127.0.0.1:6379", "", "orders", useSSL: true) {
                 User = "iam-user",
                 CredentialsProvider = () => new RedisCredentials("iam-user", "rotating-token-value"),
             };
@@ -90,8 +88,7 @@ namespace Beztek.Facade.Cache.Tests
         [Test]
         public void BuildConfigurationOptions_SetsUserAndPassword()
         {
-            var config = new RedisProviderConfiguration("127.0.0.1:6379", "secret", "orders", useSSL: true)
-            {
+            var config = new RedisProviderConfiguration("127.0.0.1:6379", "secret", "orders", useSSL: true) {
                 User = "acl-user",
             };
             var options = RedisProvider.BuildConfigurationOptions(config);
@@ -110,12 +107,10 @@ namespace Beztek.Facade.Cache.Tests
                 "master.example.cache.amazonaws.com:6379",
                 password: "",
                 cacheName: "orders",
-                useSSL: true)
-            {
+                useSSL: true) {
                 TimeProvider = time,
                 PasswordRefreshSkew = TimeSpan.FromMinutes(2),
-                CredentialsProvider = () =>
-                {
+                CredentialsProvider = () => {
                     calls++;
                     return new RedisCredentials(
                         "grasp-api",
@@ -150,10 +145,8 @@ namespace Beztek.Facade.Cache.Tests
                 "master.example.cache.amazonaws.com:6379",
                 password: "",
                 cacheName: "orders",
-                useSSL: true)
-            {
-                CredentialsProvider = () =>
-                {
+                useSSL: true) {
+                CredentialsProvider = () => {
                     calls++;
                     return new RedisCredentials("grasp-api", $"token-{calls}");
                 },

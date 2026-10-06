@@ -2,7 +2,6 @@
 
 namespace Beztek.Facade.Cache.Tests
 {
-    using System;
     using Beztek.Facade.Cache;
     using NUnit.Framework;
 
@@ -72,8 +71,7 @@ namespace Beztek.Facade.Cache.Tests
                 "master.example.cache.amazonaws.com:6379",
                 password: "",
                 cacheName: "orders",
-                useSSL: true)
-            {
+                useSSL: true) {
                 User = "grasp-api",
                 CredentialsProvider = () => new RedisCredentials("grasp-api", "iam-token"),
             };

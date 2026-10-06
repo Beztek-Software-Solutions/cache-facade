@@ -35,8 +35,7 @@ namespace Beztek.Facade.Cache.Tests
             byte[] capturedToken = null;
             this.lockMap
                 .Setup(m => m.PutIfAbsentAsync("k1", It.IsAny<byte[]>(), It.IsAny<TimeSpan>()))
-                .Returns((string _, byte[] token, TimeSpan __) =>
-                {
+                .Returns((string _, byte[] token, TimeSpan __) => {
                     capturedToken = token;
                     return Task.FromResult<byte[]>(null);
                 });
@@ -66,8 +65,7 @@ namespace Beztek.Facade.Cache.Tests
             byte[] token = null;
             this.lockMap
                 .Setup(m => m.PutIfAbsentAsync("k1", It.IsAny<byte[]>(), It.IsAny<TimeSpan>()))
-                .Returns((string _, byte[] t, TimeSpan __) =>
-                {
+                .Returns((string _, byte[] t, TimeSpan __) => {
                     token = t;
                     return Task.FromResult<byte[]>(null);
                 });
@@ -92,8 +90,7 @@ namespace Beztek.Facade.Cache.Tests
                 .Setup(m => m.RemoveAsync("k1", It.IsAny<byte[]>()))
                 .ThrowsAsync(new InvalidOperationException("gone"));
 
-            Assert.DoesNotThrow(() =>
-            {
+            Assert.DoesNotThrow(() => {
                 using (this.factory.AcquireLock("k1", 50, 300, 1))
                 {
                 }

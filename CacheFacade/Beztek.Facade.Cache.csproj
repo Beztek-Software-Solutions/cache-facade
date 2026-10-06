@@ -4,14 +4,14 @@
 	  <TargetFramework>net9.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <id>Beztek.Facade.Cache</id>
-    <version>1.7.7</version>
+    <version>1.8.0</version>
     <authors>Peter Thomas</authors>
     <owners>Beztek Software Solutions</owners>
     <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Beztek-Software-Solutions/cache-facade</projectUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>API facade over various distributed and non-distributed caches</description>
-    <releaseNotes>Redis/Valkey CredentialsProvider: optional ExpiresAt caches until near expiry (PasswordRefreshSkew); two-arg RedisCredentials(user, password) unchanged and remints each AUTH.</releaseNotes>
+    <releaseNotes>SearchByQueryAsync: Peek + GetByIdsAsync + Warm. GetByIdsAsync is a default interface method (N× GetById; optional to override). SqlPersistenceService overrides with IN (...) for true 1+1. ISqlGenerator.GetSqlSelectByIds + GetId for that SQL batch.</releaseNotes>
     <copyright>Copyright 2023, Beztek Software Solutions</copyright>
     <tags>Beztek.Facade.Cache;cache-facade;CacheFacade</tags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>

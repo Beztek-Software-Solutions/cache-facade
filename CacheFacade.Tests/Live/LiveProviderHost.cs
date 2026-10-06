@@ -35,8 +35,7 @@ namespace Beztek.Facade.Cache.Tests.Live
 
             try
             {
-                return providerType switch
-                {
+                return providerType switch {
                     CacheProviderType.LocalMemory => StartLocalMemory(),
                     CacheProviderType.Redis => await StartRedisAsync().ConfigureAwait(false),
                     CacheProviderType.Dragonfly => await StartDragonflyAsync().ConfigureAwait(false),

@@ -96,8 +96,7 @@ namespace Beztek.Facade.Cache.Providers
         [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
         private static IHazelcastClient StartClient(HazelcastProviderConfiguration configuration)
         {
-            return HazelcastClientFactory.StartNewClientAsync(options =>
-            {
+            return HazelcastClientFactory.StartNewClientAsync(options => {
                 options.ClusterName = configuration.ClusterName;
                 options.Networking.Addresses.Add(configuration.Address);
             }).AsTask().GetAwaiter().GetResult();

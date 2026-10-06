@@ -29,11 +29,32 @@ With Redis in a clustered micro-service you get cache performance with SQL query
 | `GetAndReplaceAsync<T>` | Replace if present; etag check for `IEtagEntity` |
 | `GetAndPutAsync<T>` | Upsert into cache (+ persistence per mode) |
 | `RemoveAsync<T>` | Remove from cache (+ delete / enqueue per mode) |
-| `SearchByQueryAsync<T>` | Paged SQL id query + hydrate via `GetAsync` |
+| `SearchByQueryAsync<T>` | Paged SQL id query + hydrate: peek cache hits, `GetByIdsAsync` for misses, then `WarmAsync` |
 | `FlushKeyAsync` / `FlushAsync` | Evict from provider only (write-behind snapshots still drain) |
 | `AcquireLock` | Named disposable lock (RedLock, Redis token lock, Hazelcast/Memcached token locks, or local non-reentrant lock). Timeouts: `CacheConfiguration.LockAcquireTimeoutMillis` / `LockTimeToLiveMillis` (defaults 2s / 10s). |
 
 Obtain instances only via `CacheFactory.GetOrCreateCache` / `GetCache`.
+
+### Search hydration (1+1 vs 1+N)
+
+`SearchByQueryAsync` does **not** call `GetAsync` per id. Flow:
+
+1. **Id page** — `IPersistenceService.SearchIdsByQueryAsync` (one SQL page of keys).
+2. **Peek** — provider hits stay in memory; no persistence.
+3. **Load misses** — `IPersistenceService.GetByIdsAsync` for ids absent from the cache.
+4. **Warm** — `WarmAsync` fills the provider for loaded misses, then return the page in id order.
+
+**`GetByIdsAsync` is optional to implement.** It is a **default interface method** on `IPersistenceService` that loops `GetByIdAsync` (correct, but 1+N). Custom persistences (app routers that are not `SqlPersistenceService`) can ignore it entirely when upgrading.
+
+**`SqlPersistenceService<T>` overrides** `GetByIdsAsync` with one `WHERE id IN (...)` via `ISqlGenerator.GetSqlSelectByIds` + `GetId`. That override is optional for “it still works,” but **required for true 1+1** on the SQL path. The interface default never calls `SqlPersistenceService` — not every persistence backend is SQL.
+
+| Persistence | Search hydrate cost |
+|-------------|---------------------|
+| `SqlPersistenceService<T>` (with generator `GetSqlSelectByIds`) | 1 id page + 1 batch load for misses |
+| Custom `IPersistenceService` (no override) | 1 id page + N `GetByIdAsync` for misses |
+| Custom that overrides `GetByIdsAsync` | Same as SQL if you batch |
+
+Generators used with `SqlPersistenceService` must implement `GetSqlSelectByIds` and `GetId`. Apps that do not use `ISqlGenerator` / `SqlPersistenceService` are unaffected.
 
 ## Initializing cache
 
@@ -491,8 +512,8 @@ Need write-behind?
 |------|------|
 | `EtagUtil` | Sequential etag generation / parse |
 | `EtagEntityUpdateHelper` | Retrying optimistic updates on `ConcurrencyException` |
-| `SqlPersistenceService<T>` | Default SQL `IPersistenceService` |
-| `ISqlGenerator<T>` | Dialect-specific insert/update/delete/upsert SQL |
+| `SqlPersistenceService<T>` | Default SQL `IPersistenceService`; overrides `GetByIdsAsync` with `IN (...)` for search (optional for correctness, needed for 1+1) |
+| `ISqlGenerator<T>` | Dialect-specific SQL; include `GetSqlSelectByIds` / `GetId` when using `SqlPersistenceService` batch hydrate |
 | `CacheWriteBehindProcessor<T>` | Queue drain for `WriteBehindMessage` |
 
 XML documentation is included in the NuGet package (`GenerateDocumentationFile`).

@@ -151,8 +151,7 @@ namespace Beztek.Facade.Cache.Tests
 
         private static Message Wrap(WriteBehindMessage writeBehindMessage)
         {
-            return new Message
-            {
+            return new Message {
                 MessageType = typeof(WriteBehindMessage).ToString(),
                 RawMessage = writeBehindMessage,
             };

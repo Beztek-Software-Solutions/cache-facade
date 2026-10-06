@@ -5,6 +5,7 @@ namespace Beztek.Facade.Cache.Tests
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
     using Beztek.Facade.Cache;
@@ -342,6 +343,80 @@ namespace Beztek.Facade.Cache.Tests
 
                 Assert.That(page.PagedList.Count, Is.EqualTo(5));
                 Assert.That(((PagedResultsWithTotal<TestEtagCacheable>)page).TotalResults, Is.EqualTo(5));
+            }
+            finally
+            {
+                cache.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task SearchByQuery_ColdCache_HydratesWithSingleGetByIds_NotPerIdGet()
+        {
+            string cacheName = Guid.NewGuid().ToString("N");
+            ISqlFacade sqlFacade = SqlFacadeFactory.GetSqlFacade(
+                new SqlFacadeConfig(Beztek.Facade.Sql.DbType.SQLITE, "Data Source=:memory:"));
+            var realPersistence = new SqlPersistenceService<TestEtagCacheable>(sqlFacade, new TestSqlGenerator());
+            TestUtil.InitializeDB(sqlFacade);
+
+            string prefix = "batch-" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            var seeded = new List<TestEtagCacheable>();
+            for (int i = 0; i < 4; i++)
+            {
+                var entity = new TestEtagCacheable(
+                    prefix + i, "v" + i, TestUtil.GetNow(), TestUtil.GetNow(), EtagUtil.GenerateEtag());
+                await realPersistence.CreateAsync(entity.Id, entity).ConfigureAwait(false);
+                seeded.Add(entity);
+            }
+
+            int getByIdCalls = 0;
+            int getByIdsCalls = 0;
+            var persistence = new Mock<IPersistenceService>(MockBehavior.Strict);
+            persistence.Setup(p => p.SearchIdsByQueryAsync(
+                    It.IsAny<SqlSelect>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>()))
+                .Returns((SqlSelect q, int page, int size, bool total) =>
+                    realPersistence.SearchIdsByQueryAsync(q, page, size, total));
+            persistence.Setup(p => p.GetByIdAsync(It.IsAny<string>()))
+                .Returns((string id) => {
+                    getByIdCalls++;
+                    return realPersistence.GetByIdAsync(id);
+                });
+            persistence.Setup(p => p.GetByIdsAsync(It.IsAny<IReadOnlyList<string>>()))
+                .Returns((IReadOnlyList<string> ids) => {
+                    getByIdsCalls++;
+                    return realPersistence.GetByIdsAsync(ids);
+                });
+
+            Cache cache = (Cache)CacheFactory.GetOrCreateCache(
+                new CacheConfiguration(
+                    new LocalMemoryProviderConfiguration(cacheName, 300_000),
+                    CacheType.WriteThrough,
+                    persistence.Object));
+            try
+            {
+                SqlSelect query = new SqlSelect(new Table("test_etag_cacheable", "v"))
+                    .WithWhere(new Filter().WithExpression(
+                        new Expression("v.id", prefix).WithRelation(Relation.GreaterThanOrEqualTo)));
+
+                PagedResults<TestEtagCacheable> page = await cache
+                    .SearchByQueryAsync<TestEtagCacheable>(query, 1, 10, true)
+                    .ConfigureAwait(false);
+
+                Assert.That(page.PagedList.Count, Is.EqualTo(4));
+                Assert.That(getByIdsCalls, Is.EqualTo(1), "misses should hydrate with one GetByIdsAsync");
+                Assert.That(getByIdCalls, Is.EqualTo(0), "SearchByQuery must not N+1 via GetByIdAsync");
+                Assert.That(page.PagedList.Select(e => e.Id).OrderBy(x => x).ToList(),
+                    Is.EqualTo(seeded.Select(e => e.Id).OrderBy(x => x).ToList()));
+
+                // Second search should be cache hits only (no further persistence reads).
+                getByIdsCalls = 0;
+                getByIdCalls = 0;
+                PagedResults<TestEtagCacheable> again = await cache
+                    .SearchByQueryAsync<TestEtagCacheable>(query, 1, 10, false)
+                    .ConfigureAwait(false);
+                Assert.That(again.PagedList.Count, Is.EqualTo(4));
+                Assert.That(getByIdsCalls, Is.EqualTo(0));
+                Assert.That(getByIdCalls, Is.EqualTo(0));
             }
             finally
             {

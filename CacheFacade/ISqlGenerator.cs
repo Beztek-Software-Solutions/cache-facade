@@ -1,4 +1,4 @@
-﻿// Copyright (c) Beztek Software Solutions. All rights reserved.
+// Copyright (c) Beztek Software Solutions. All rights reserved.
 
 namespace Beztek.Facade.Cache
 {
@@ -10,6 +10,12 @@ namespace Beztek.Facade.Cache
     /// Generates dialect-specific SQL for CRUD and upsert operations for entity type <typeparamref name="T"/>.
     /// Used by <see cref="SqlPersistenceService{T}"/>.
     /// </summary>
+    /// <remarks>
+    /// <see cref="GetSqlSelectByIds"/> and <see cref="GetId"/> are required for
+    /// <see cref="SqlPersistenceService{T}.GetByIdsAsync"/> (batch search hydrate). They are not used by
+    /// custom <see cref="IPersistenceService"/> implementations that skip that override and rely on the
+    /// interface default (N× <see cref="IPersistenceService.GetByIdAsync"/>).
+    /// </remarks>
     /// <typeparam name="T">Entity type.</typeparam>
     public interface ISqlGenerator<in T>
     {
@@ -19,6 +25,24 @@ namespace Beztek.Facade.Cache
         /// <param name="id">is the identity of the entity of type T</param>
         /// <returns>SqlSelect object for the entity of type T</returns>
         SqlSelect GetSqlSelect(string id);
+
+        /// <summary>
+        /// Provides a SqlSelect that loads all entities whose ids are in <paramref name="ids"/>
+        /// (typically <c>WHERE id IN (...)</c>). Used by <see cref="SqlPersistenceService{T}.GetByIdsAsync"/>
+        /// for 1+1 search hydration.
+        /// </summary>
+        /// <param name="ids">Non-empty list of entity ids (already distinct).</param>
+        /// <returns>SqlSelect returning rows mappable to <typeparamref name="T"/>.</returns>
+        SqlSelect GetSqlSelectByIds(IReadOnlyList<string> ids);
+
+        /// <summary>
+        /// Returns the persistence/cache key for a loaded entity (same string used with
+        /// <see cref="GetSqlSelect"/> / cache keys). Required so batch <see cref="GetSqlSelectByIds"/>
+        /// results can be mapped back into the id → entity dictionary.
+        /// </summary>
+        /// <param name="entity">Loaded entity.</param>
+        /// <returns>Id string, or <c>null</c> if the entity cannot be keyed.</returns>
+        string GetId(T entity);
 
         /// <summary>
         /// Provides a list of ISqlWrite statements to delete the entity of type T

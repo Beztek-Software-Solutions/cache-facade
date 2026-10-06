@@ -34,8 +34,7 @@ namespace Beztek.Facade.Cache.Tests
             CasResult<string> ignored = default;
             this.client
                 .Setup(c => c.TryGetWithCas("orders:lock:k1", out ignored))
-                .Returns((string key, out CasResult<string> result) =>
-                {
+                .Returns((string key, out CasResult<string> result) => {
                     result = new CasResult<string> { Result = token, Cas = 1 };
                     return true;
                 });
@@ -71,8 +70,7 @@ namespace Beztek.Facade.Cache.Tests
             CasResult<string> casResult = default;
             this.client
                 .Setup(c => c.TryGetWithCas("orders:lock:k1", out casResult))
-                .Returns((string key, out CasResult<string> result) =>
-                {
+                .Returns((string key, out CasResult<string> result) => {
                     result = new CasResult<string> { Result = token, Cas = 42 };
                     return true;
                 });
@@ -106,8 +104,7 @@ namespace Beztek.Facade.Cache.Tests
             CasResult<string> casResult = default;
             this.client
                 .Setup(c => c.TryGetWithCas("orders:lock:k1", out casResult))
-                .Returns((string key, out CasResult<string> result) =>
-                {
+                .Returns((string key, out CasResult<string> result) => {
                     result = new CasResult<string> { Result = "someone-else", Cas = 99 };
                     return true;
                 });

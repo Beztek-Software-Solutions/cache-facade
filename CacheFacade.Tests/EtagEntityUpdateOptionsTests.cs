@@ -11,8 +11,7 @@ namespace Beztek.Facade.Cache.Tests
         [Test]
         public void Normalized_ClampsNegativeAndMaxBelowInitial()
         {
-            var options = new EtagEntityUpdateOptions
-            {
+            var options = new EtagEntityUpdateOptions {
                 MaxRetryCount = -1,
                 InitialRetryDelayMillis = -5,
                 MaxRetryDelayMillis = -10,
@@ -23,8 +22,7 @@ namespace Beztek.Facade.Cache.Tests
             Assert.That(normalized.InitialRetryDelayMillis, Is.EqualTo(0));
             Assert.That(normalized.MaxRetryDelayMillis, Is.EqualTo(0));
 
-            var maxBelowInitial = new EtagEntityUpdateOptions
-            {
+            var maxBelowInitial = new EtagEntityUpdateOptions {
                 InitialRetryDelayMillis = 50,
                 MaxRetryDelayMillis = 10,
             }.Normalized();
@@ -34,8 +32,7 @@ namespace Beztek.Facade.Cache.Tests
         [Test]
         public void CalculateRetryDelayMillis_NegativeIndexUsesInitial()
         {
-            var options = new EtagEntityUpdateOptions
-            {
+            var options = new EtagEntityUpdateOptions {
                 InitialRetryDelayMillis = 7,
                 MaxRetryDelayMillis = 100,
                 UseExponentialBackoff = true,

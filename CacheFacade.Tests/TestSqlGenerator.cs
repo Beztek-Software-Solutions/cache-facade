@@ -33,6 +33,27 @@ namespace Beztek.Facade.Cache.Tests
                 .WithWhere(new Filter().WithExpression(new Expression("id", id)));
         }
 
+        public virtual SqlSelect GetSqlSelectByIds(IReadOnlyList<string> ids)
+        {
+            string[] idArray = new string[ids.Count];
+            for (int i = 0; i < ids.Count; i++)
+            {
+                idArray[i] = ids[i];
+            }
+
+            return new SqlSelect("test_etag_cacheable")
+                .WithField(new Field("id", "Id"))
+                .WithField(new Field("value", "Value"))
+                .WithField(new Field("created_date", "CreatedDate"))
+                .WithField(new Field("updated_date", "UpdatedDate"))
+                .WithField(new Field("etag", "Etag"))
+                .WithField(new Field("is_deleted", "IsDeleted"))
+                .WithWhere(new Filter().WithExpression(
+                    new Expression("id", idArray).WithRelation(Relation.In)));
+        }
+
+        public virtual string GetId(Tests.TestEtagCacheable entity) => entity?.Id;
+
         public List<ISqlWrite> GetSqlUpdate(string id, Tests.TestEtagCacheable t)
         {
             return new List<ISqlWrite>{ new SqlUpdate("test_etag_cacheable")

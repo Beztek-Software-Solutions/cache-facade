@@ -485,34 +485,83 @@ namespace Beztek.Facade.Cache
         }
 
         /// <inheritdoc />
+        /// <remarks>
+        /// Hydration path (write-through / write-behind only):
+        /// <list type="number">
+        /// <item><description><see cref="IPersistenceService.SearchIdsByQueryAsync"/> — id page (1).</description></item>
+        /// <item><description><see cref="PeekAsync{T}"/> — cache hits; no persistence.</description></item>
+        /// <item><description><see cref="IPersistenceService.GetByIdsAsync"/> — load misses (1 when
+        /// <see cref="SqlPersistenceService{T}"/> overrides; otherwise the interface default loops
+        /// <see cref="IPersistenceService.GetByIdAsync"/>).</description></item>
+        /// <item><description><see cref="WarmAsync{T}"/> — fill provider for loaded misses.</description></item>
+        /// </list>
+        /// Custom <see cref="IPersistenceService"/> types need not implement <see cref="IPersistenceService.GetByIdsAsync"/>.
+        /// </remarks>
         public async Task<PagedResults<T>> SearchByQueryAsync<T>(SqlSelect query, int pageNum, int pageSize, bool retrieveTotalNumResults = false)
         {
             if (this.CacheType == CacheType.WriteThrough || this.CacheType == CacheType.WriteBehind)
             {
                 PagedResults<string> pagedIds = await this.PersistenceService.SearchIdsByQueryAsync(query, pageNum, pageSize, retrieveTotalNumResults).ConfigureAwait(false);
 
-                List<Task<T>> tasks = new List<Task<T>>();
-                foreach (string id in pagedIds.PagedList)
+                IList<string> ids = pagedIds.PagedList;
+                List<T> results = new List<T>(ids.Count);
+                if (ids.Count == 0)
                 {
-                    tasks.Add(this.GetAsync<T>(id));
+                    return BuildPagedResults(pagedIds, results);
                 }
 
-                List<T> results = new List<T>();
-                foreach (Task<T> task in tasks)
+                // Peek hits; one GetByIdsAsync for misses (batch if persistence overrides; else 1+N default).
+                Dictionary<string, T> byId = new Dictionary<string, T>(ids.Count, System.StringComparer.Ordinal);
+                List<string> missIds = new List<string>();
+                foreach (string id in ids)
                 {
-                    results.Add(await task.ConfigureAwait(false));
+                    T peeked = await this.PeekAsync<T>(id).ConfigureAwait(false);
+                    if (peeked != null)
+                    {
+                        byId[id] = peeked;
+                    }
+                    else if (id != null)
+                    {
+                        missIds.Add(id);
+                    }
                 }
 
-                PagedResultsWithTotal<string> pagedIdsWIthTotal = pagedIds as PagedResultsWithTotal<string>;
-                if (pagedIdsWIthTotal != null)
+                if (missIds.Count > 0)
                 {
-                    return new PagedResultsWithTotal<T>(pagedIds.PageNum, pagedIds.PageSize, results, pagedIdsWIthTotal.TotalResults);
+                    IDictionary<string, object> loaded = await this.PersistenceService.GetByIdsAsync(missIds).ConfigureAwait(false);
+                    foreach (string missId in missIds)
+                    {
+                        if (!loaded.TryGetValue(missId, out object value) || value is not T typed || typed == null)
+                        {
+                            continue;
+                        }
+
+                        await this.WarmAsync(missId, typed).ConfigureAwait(false);
+                        byId[missId] = typed;
+                    }
                 }
 
-                return new PagedResults<T>(pagedIds.PageNum, pagedIds.PageSize, results);
+                foreach (string id in ids)
+                {
+                    byId.TryGetValue(id, out T item);
+                    results.Add(item);
+                }
+
+                return BuildPagedResults(pagedIds, results);
             }
 
             throw new NotSupportedException();
+        }
+
+        private static PagedResults<T> BuildPagedResults<T>(PagedResults<string> pagedIds, List<T> results)
+        {
+            PagedResultsWithTotal<string> pagedIdsWithTotal = pagedIds as PagedResultsWithTotal<string>;
+            if (pagedIdsWithTotal != null)
+            {
+                return new PagedResultsWithTotal<T>(pagedIds.PageNum, pagedIds.PageSize, results, pagedIdsWithTotal.TotalResults);
+            }
+
+            return new PagedResults<T>(pagedIds.PageNum, pagedIds.PageSize, results);
         }
 
         /// <inheritdoc />
@@ -626,8 +675,7 @@ namespace Beztek.Facade.Cache
                 sequence = EtagUtil.NextSequence();
             }
 
-            return new WriteBehindMessage
-            {
+            return new WriteBehindMessage {
                 Id = id,
                 WriteType = writeType,
                 Value = value,

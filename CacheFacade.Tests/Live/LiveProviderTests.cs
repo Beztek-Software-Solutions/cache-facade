@@ -103,8 +103,7 @@ namespace Beztek.Facade.Cache.Tests.Live
                 Assert.That(held, Is.Not.Null);
                 // Other thread must time out while this thread holds the lock (locks are non-reentrant).
                 Exception otherThreadError = null;
-                Task.Run(() =>
-                {
+                Task.Run(() => {
                     try
                     {
                         cache.AcquireLock(lockName, timeoutMillis: 150, lockTimeMillis: 1000, retryIntervalMillis: 20);

@@ -39,8 +39,7 @@ namespace Beztek.Facade.Cache
         /// <summary>Process-wide defaults applied when no per-call options are supplied.</summary>
         public static EtagEntityUpdateOptions Defaults
         {
-            get
-            {
+            get {
                 lock (DefaultsGate)
                 {
                     return defaults.Clone();

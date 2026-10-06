@@ -23,8 +23,7 @@ namespace Beztek.Facade.Cache
         public bool UseExponentialBackoff { get; set; } = true;
 
         /// <summary>Create a copy with the same values.</summary>
-        public EtagEntityUpdateOptions Clone() => new EtagEntityUpdateOptions
-        {
+        public EtagEntityUpdateOptions Clone() => new EtagEntityUpdateOptions {
             MaxRetryCount = MaxRetryCount,
             InitialRetryDelayMillis = InitialRetryDelayMillis,
             MaxRetryDelayMillis = MaxRetryDelayMillis,

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Beztek Software Solutions. All rights reserved.
+// Copyright (c) Beztek Software Solutions. All rights reserved.
 
 namespace Beztek.Facade.Cache
 {
@@ -13,6 +13,12 @@ namespace Beztek.Facade.Cache
     /// <see cref="ISqlGenerator{T}"/> for entity type <typeparamref name="T"/>.
     /// Soft-deleted <see cref="IWriteBehindEntity"/> rows are treated as missing on read.
     /// </summary>
+    /// <remarks>
+    /// Overrides <see cref="IPersistenceService.GetByIdsAsync"/> with one SQL
+    /// <c>IN (...)</c> load via <see cref="ISqlGenerator{T}.GetSqlSelectByIds"/>. That override is
+    /// optional for correctness (the interface default loops <see cref="GetByIdAsync"/>) but
+    /// required for true 1+1 <see cref="ICache.SearchByQueryAsync{T}"/> on this SQL path.
+    /// </remarks>
     /// <typeparam name="T">Entity type mapped by the SQL generator.</typeparam>
     public class SqlPersistenceService<T> : IPersistenceService
     {
@@ -42,6 +48,61 @@ namespace Beztek.Facade.Cache
             }
 
             return await Task.FromResult<object>(result).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// True batch hydrate for search: one <see cref="ISqlFacade.GetResults{T}(SqlSelect)"/> using
+        /// <see cref="ISqlGenerator{T}.GetSqlSelectByIds"/>. Skipping this override would fall back to
+        /// the interface default (N× <see cref="GetByIdAsync"/>).
+        /// </remarks>
+        public virtual async Task<IDictionary<string, object>> GetByIdsAsync(IReadOnlyList<string> ids)
+        {
+            Dictionary<string, object> map = new Dictionary<string, object>(System.StringComparer.Ordinal);
+            if (ids == null || ids.Count == 0)
+            {
+                return await Task.FromResult<IDictionary<string, object>>(map).ConfigureAwait(false);
+            }
+
+            List<string> distinct = new List<string>();
+            HashSet<string> seen = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (string id in ids)
+            {
+                if (string.IsNullOrEmpty(id) || !seen.Add(id))
+                {
+                    continue;
+                }
+
+                distinct.Add(id);
+            }
+
+            if (distinct.Count == 0)
+            {
+                return await Task.FromResult<IDictionary<string, object>>(map).ConfigureAwait(false);
+            }
+
+            SqlSelect sqlSelect = this.sqlGenerator.GetSqlSelectByIds(distinct);
+            IList<T> loaded = this.sqlFacade.GetResults<T>(sqlSelect);
+            foreach (T item in loaded)
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (item is IWriteBehindEntity writeBehindEntity && writeBehindEntity.IsDeleted)
+                {
+                    continue;
+                }
+
+                string entityId = this.sqlGenerator.GetId(item);
+                if (!string.IsNullOrEmpty(entityId))
+                {
+                    map[entityId] = item;
+                }
+            }
+
+            return await Task.FromResult<IDictionary<string, object>>(map).ConfigureAwait(false);
         }
 
         /// <inheritdoc />

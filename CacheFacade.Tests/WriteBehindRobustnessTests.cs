@@ -427,8 +427,7 @@ namespace Beztek.Facade.Cache.Tests
         {
             await using WriteBehindHarness harness = await WriteBehindHarness.CreateAsync().ConfigureAwait(false);
             string id = Guid.NewGuid().ToString();
-            Message message = new Message
-            {
+            Message message = new Message {
                 MessageType = typeof(WriteBehindMessage).ToString(),
                 RawMessage = Msg(id, WriteType.Create, Entity(id, "direct", 42), 42)
             };
@@ -550,8 +549,7 @@ namespace Beztek.Facade.Cache.Tests
                     cache,
                     entity.Id,
                     new object[] { $"v{i}" },
-                    (e, p) =>
-                    {
+                    (e, p) => {
                         e.Value = p[0].ToString();
                         e.UpdatedDate = TestUtil.GetNow();
                         return e;
@@ -588,8 +586,7 @@ namespace Beztek.Facade.Cache.Tests
                 cache,
                 v1.Id,
                 new object[] { "two" },
-                (e, p) =>
-                {
+                (e, p) => {
                     e.Value = p[0].ToString();
                     e.UpdatedDate = TestUtil.GetNow();
                     return e;
@@ -644,8 +641,7 @@ namespace Beztek.Facade.Cache.Tests
 
         private static WriteBehindMessage Msg(string id, WriteType writeType, object value, long sequence)
         {
-            return new WriteBehindMessage
-            {
+            return new WriteBehindMessage {
                 Id = id,
                 WriteType = writeType,
                 Value = value,
@@ -656,8 +652,7 @@ namespace Beztek.Facade.Cache.Tests
         private static Message Wrap(WriteBehindMessage writeBehindMessage)
         {
             // Round-trip through JSON like the real queue so Value arrives as JsonElement.
-            Message envelope = new Message
-            {
+            Message envelope = new Message {
                 MessageType = typeof(WriteBehindMessage).ToString(),
                 RawMessage = writeBehindMessage
             };

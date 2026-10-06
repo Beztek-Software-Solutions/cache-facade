@@ -37,8 +37,7 @@ namespace Beztek.Facade.Cache.Tests
         [Test]
         public void RetryPolicy_UsesFiveRetriesWithExponentialBackoff()
         {
-            EtagEntityUpdateHelper.Configure(new EtagEntityUpdateOptions
-            {
+            EtagEntityUpdateHelper.Configure(new EtagEntityUpdateOptions {
                 MaxRetryCount = 5,
                 InitialRetryDelayMillis = 5,
                 MaxRetryDelayMillis = 200,
@@ -59,8 +58,7 @@ namespace Beztek.Facade.Cache.Tests
         [Test]
         public void Configure_AndPerCallOptions_AreHonored()
         {
-            EtagEntityUpdateHelper.Configure(new EtagEntityUpdateOptions
-            {
+            EtagEntityUpdateHelper.Configure(new EtagEntityUpdateOptions {
                 MaxRetryCount = 2,
                 InitialRetryDelayMillis = 3,
                 MaxRetryDelayMillis = 50,
@@ -71,8 +69,7 @@ namespace Beztek.Facade.Cache.Tests
             Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(0), Is.EqualTo(3));
             Assert.That(EtagEntityUpdateHelper.CalculateRetryDelayMillis(4), Is.EqualTo(3));
 
-            var perCall = new EtagEntityUpdateOptions
-            {
+            var perCall = new EtagEntityUpdateOptions {
                 MaxRetryCount = 1,
                 InitialRetryDelayMillis = 7,
                 MaxRetryDelayMillis = 100,

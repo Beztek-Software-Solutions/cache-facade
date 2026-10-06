@@ -3,7 +3,6 @@
 namespace Beztek.Facade.Cache.Tests
 {
     using System;
-    using Beztek.Facade.Cache;
     using Beztek.Facade.Cache.Providers;
     using NUnit.Framework;
 
