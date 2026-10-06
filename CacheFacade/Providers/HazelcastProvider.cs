@@ -67,6 +67,11 @@ namespace Beztek.Facade.Cache.Providers
             return removed == null ? default(T) : SerializationUtil.Deserialize<T>(SerType, removed);
         }
 
+        public void Evict(string key)
+        {
+            Await(this.map.RemoveAsync(key));
+        }
+
         public bool Clear()
         {
             Await(this.map.ClearAsync());

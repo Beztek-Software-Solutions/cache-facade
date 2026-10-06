@@ -4,14 +4,14 @@
 	  <TargetFramework>net9.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <id>Beztek.Facade.Cache</id>
-    <version>1.8.0</version>
+    <version>1.8.1</version>
     <authors>Peter Thomas</authors>
     <owners>Beztek Software Solutions</owners>
     <licenseUrl>https://github.com/Beztek-Software-Solutions/cache-facade/blob/main/LICENSE</licenseUrl>
     <projectUrl>https://github.com/Beztek-Software-Solutions/cache-facade</projectUrl>
     <requireLicenseAcceptance>true</requireLicenseAcceptance>
     <description>API facade over various distributed and non-distributed caches</description>
-    <releaseNotes>SearchByQueryAsync: Peek + GetByIdsAsync + Warm. GetByIdsAsync is a default interface method (N× GetById; optional to override). SqlPersistenceService overrides with IN (...) for true 1+1. ISqlGenerator.GetSqlSelectByIds + GetId for that SQL batch.</releaseNotes>
+    <releaseNotes>WriteThrough: ambient TransactionScope abort evicts provider keys via TransactionCompleted (no EnlistVolatile / 2PC). Write-behind is not supported for ambient transaction cache cleanup. ICacheProvider.Evict for type-agnostic key removal. Live SQL ambient tests: CACHEFACADE_LIVE_SQL_ENGINES (all enlisting engines; not SQLite).</releaseNotes>
     <copyright>Copyright 2023, Beztek Software Solutions</copyright>
     <tags>Beztek.Facade.Cache;cache-facade;CacheFacade</tags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <PackageReference Include="Beztek.Facade.Queue" Version="1.2.1" />
-    <PackageReference Include="Beztek.Facade.Sql" Version="1.4.3" />
+    <PackageReference Include="Beztek.Facade.Sql" Version="1.4.4" />
     <PackageReference Include="Hazelcast.Net" Version="5.7.0" />
     <PackageReference Include="EnyimMemcachedCore" Version="3.5.1" />
     <!-- EnyimMemcachedCore pins MessagePack 3.1.4 (NU190x / GHSA-382j-8mxh-c7x2 et al.);

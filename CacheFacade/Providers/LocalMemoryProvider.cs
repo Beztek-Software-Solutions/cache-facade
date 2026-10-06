@@ -42,6 +42,11 @@ namespace Beztek.Facade.Cache.Providers
             return Deserialize<T>((byte[])this.localMemoryCache.Remove(key));
         }
 
+        public void Evict(string key)
+        {
+            this.localMemoryCache.Remove(key);
+        }
+
         public bool Clear()
         {
             var allKeys = this.localMemoryCache.Select(o => o.Key);

@@ -95,6 +95,34 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
+        public void Dispose_IsIdempotent()
+        {
+            string token = null;
+            this.client
+                .Setup(c => c.Store(StoreMode.Add, "orders:lock:k1", It.IsAny<object>(), It.IsAny<TimeSpan>()))
+                .Callback<StoreMode, string, object, TimeSpan>((_, _, value, _) => token = (string)value)
+                .Returns(true);
+
+            CasResult<string> casResult = default;
+            this.client
+                .Setup(c => c.TryGetWithCas("orders:lock:k1", out casResult))
+                .Returns((string key, out CasResult<string> result) => {
+                    result = new CasResult<string> { Result = token, Cas = 1 };
+                    return true;
+                });
+            this.client
+                .Setup(c => c.Cas(StoreMode.Set, "orders:lock:k1", It.IsAny<object>(), It.IsAny<DateTime>(), 1UL))
+                .Returns(new CasResult<bool> { Result = true });
+
+            IDisposable handle = this.factory.AcquireLock("k1", 50, 2000, 1);
+            handle.Dispose();
+            Assert.DoesNotThrow(() => handle.Dispose());
+            this.client.Verify(
+                c => c.Cas(StoreMode.Set, "orders:lock:k1", It.IsAny<object>(), It.IsAny<DateTime>(), 1UL),
+                Times.Once);
+        }
+
+        [Test]
         public void Dispose_DoesNotExpire_WhenTokenNoLongerMatches()
         {
             this.client

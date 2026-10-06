@@ -77,6 +77,36 @@ var cacheConfig = new CacheConfiguration(providerConfig, CacheType.WriteThrough,
 ICache cache = CacheFactory.GetOrCreateCache(cacheConfig, logger);
 ```
 
+#### Ambient `TransactionScope` (WriteThrough only)
+
+Write-through joins an ambient `TransactionScope` the same way sql-facade does (`Required`). Provider keys mutated by `GetAndPut*` / `RemoveAsync` inside the scope are tracked and **evicted if the transaction aborts** (no `Complete()`, or an exception before `Complete()`). After abort, the next `GetAsync` reloads from SQL. Cleanup uses `Transaction.TransactionCompleted` (not a volatile enlistment) so the SQL driver is not forced into two-phase prepare.
+
+```csharp
+using var scope = new TransactionScope(
+    TransactionScopeOption.Required,
+    new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted },
+    TransactionScopeAsyncFlowOption.Enabled);
+
+await cache.GetAndPutAsync(key, value);  // SQL enlisted; cache key tracked for abort cleanup
+await externalService.DoWorkAsync();     // e.g. Cognito — not enlisted
+scope.Complete();
+```
+
+**Always set `IsolationLevel.ReadCommitted` on ambient scopes** (same as sql-facade’s default). Do **not** use `new TransactionScope(...)` without `TransactionOptions` — that defaults to **Serializable**, which conflicts with sql-facade’s ReadCommitted inner scope (isolation mismatch exception) and is a poor default for normal WriteThrough traffic on Postgres.
+
+| Isolation | Meaning (simple) | Use with these facades? |
+|-----------|------------------|-------------------------|
+| **ReadCommitted** | You only see data others have already committed; you may see different committed rows if you re-read later in the same transaction | **Yes — always use this** |
+| **Serializable** | The database behaves as if transactions ran one after another; more locking, more conflicts under load | No for ambient WriteThrough (mismatches sql-facade; heavier on Postgres) |
+
+**SQLite does not support ambient transactions.** Microsoft.Data.Sqlite does not implement `EnlistTransaction`, so sql-facade calls against SQLite do **not** join an outer `TransactionScope` the way Postgres / SQL Server / MySQL / Oracle do. Cache abort eviction still runs, but the database will not roll back with the scope — use Postgres (or another enlisting engine) when you need true ambient SQL + cache cleanup. See Beztek.Facade.Sql README (Transaction isolation).
+
+**Does not apply to write-behind.** Write-behind persistence is queued outside the ambient SQL transaction; aborting a `TransactionScope` does **not** cancel queued messages or evict write-behind cache keys. Do not rely on ambient transactions for write-behind consistency.
+
+`WarmAsync` / `Flush*` are provider-only and are not enlisted.
+
+Live ambient WriteThrough tests (SQL rollback + cache eviction) run against enlisting engines only when `CACHEFACADE_LIVE_SQL_ENGINES` is set — e.g. `postgres` or `all` (Postgres, SQL Server, MySQL, MariaDB, Oracle; never SQLite). Unset keeps default CI Docker-free.
+
 ### Write-behind (Redis + queue + SQL)
 
 ```csharp

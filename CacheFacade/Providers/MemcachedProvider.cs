@@ -65,6 +65,11 @@ namespace Beztek.Facade.Cache.Providers
             return current;
         }
 
+        public void Evict(string key)
+        {
+            this.client.Remove(this.Prefixed(key));
+        }
+
         public bool Clear()
         {
             // FlushAll would wipe the entire Memcached process (all key prefixes / apps).

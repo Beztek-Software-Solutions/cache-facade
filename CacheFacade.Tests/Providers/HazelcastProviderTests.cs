@@ -70,6 +70,28 @@ namespace Beztek.Facade.Cache.Tests
         }
 
         [Test]
+        public void Evict_RemovesKey()
+        {
+            this.map.Setup(m => m.RemoveAsync("k1")).Returns(Task.FromResult<byte[]>(null));
+            this.provider.Evict("k1");
+            this.map.Verify(m => m.RemoveAsync("k1"), Times.Once);
+        }
+
+        [Test]
+        public void ClientAndMap_ExposeBackingFields()
+        {
+            Assert.That(this.provider.Client, Is.Null);
+            Assert.That(this.provider.Map, Is.SameAs(this.map.Object));
+        }
+
+        [Test]
+        public void Ctor_RejectsNullMap()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+                new HazelcastProvider(null, TimeSpan.FromMinutes(1)));
+        }
+
+        [Test]
         public async Task DisposeAsync_DisposesMap_WhenNotOwningClient()
         {
             this.map.Setup(m => m.DisposeAsync()).Returns(ValueTask.CompletedTask);

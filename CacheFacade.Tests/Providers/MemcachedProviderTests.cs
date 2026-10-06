@@ -77,5 +77,37 @@ namespace Beztek.Facade.Cache.Tests
         {
             Assert.Throws<NotSupportedException>(() => this.provider.Clear());
         }
+
+        [Test]
+        public void Evict_RemovesPrefixedKey()
+        {
+            this.client.Setup(c => c.Remove("orders:k1")).Returns(true);
+            this.provider.Evict("k1");
+            this.client.Verify(c => c.Remove("orders:k1"), Times.Once);
+        }
+
+        [Test]
+        public void ClientAndKeyPrefix_ExposeBackingFields()
+        {
+            Assert.That(this.provider.Client, Is.SameAs(this.client.Object));
+            Assert.That(this.provider.KeyPrefix, Is.EqualTo("orders:"));
+        }
+
+        [Test]
+        public void Ctor_BlankCacheName_UsesEmptyPrefix()
+        {
+            var blank = new MemcachedProvider(this.client.Object, "", TimeSpan.FromSeconds(1));
+            Assert.That(blank.KeyPrefix, Is.EqualTo(string.Empty));
+            this.client.Setup(c => c.Remove("bare")).Returns(true);
+            blank.Evict("bare");
+            this.client.Verify(c => c.Remove("bare"), Times.Once);
+        }
+
+        [Test]
+        public void Ctor_RejectsNullClient()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+                new MemcachedProvider(null, "orders", TimeSpan.FromSeconds(1)));
+        }
     }
 }

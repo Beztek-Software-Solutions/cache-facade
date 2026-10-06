@@ -69,6 +69,24 @@ namespace Beztek.Facade.Cache.Tests
             // Note: we cannot mock this method, because some objects are not interfaces or sealed.
         }
 
+        [Test]
+        public void Evict_DeletesKey()
+        {
+            this.cacheDatabase
+                .Setup(m => m.KeyDelete(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
+                .Returns(true);
+            this.redisCache.Evict("test-key");
+            this.cacheDatabase.Verify(
+                m => m.KeyDelete(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()),
+                Times.Once);
+        }
+
+        [Test]
+        public void Database_ExposesInjectedDatabase()
+        {
+            Assert.That(this.redisCache.Database, Is.SameAs(this.cacheDatabase.Object));
+        }
+
         private static string Serialize(TestCacheable obj)
         {
             try

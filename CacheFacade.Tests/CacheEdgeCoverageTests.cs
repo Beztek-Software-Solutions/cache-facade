@@ -50,14 +50,14 @@ namespace Beztek.Facade.Cache.Tests
         [Test]
         public async Task FlushAsync_WithKeyList_RemovesEachKey()
         {
-            this.cacheProvider.Setup(m => m.Remove<TestCacheable>("a")).Returns((TestCacheable)null);
-            this.cacheProvider.Setup(m => m.Remove<TestCacheable>("b")).Returns((TestCacheable)null);
+            this.cacheProvider.Setup(m => m.Evict("a"));
+            this.cacheProvider.Setup(m => m.Evict("b"));
 
             bool ok = await this.cache.FlushAsync<TestCacheable>(new[] { "a", "b" }).ConfigureAwait(false);
 
             Assert.That(ok, Is.True);
-            this.cacheProvider.Verify(m => m.Remove<TestCacheable>("a"), Times.Once);
-            this.cacheProvider.Verify(m => m.Remove<TestCacheable>("b"), Times.Once);
+            this.cacheProvider.Verify(m => m.Evict("a"), Times.Once);
+            this.cacheProvider.Verify(m => m.Evict("b"), Times.Once);
             this.cacheProvider.Verify(m => m.Clear(), Times.Never);
         }
 
@@ -66,7 +66,7 @@ namespace Beztek.Facade.Cache.Tests
         {
             bool ok = await this.cache.FlushKeyAsync<TestCacheable>(null).ConfigureAwait(false);
             Assert.That(ok, Is.False);
-            this.cacheProvider.Verify(m => m.Remove<TestCacheable>(It.IsAny<string>()), Times.Never);
+            this.cacheProvider.Verify(m => m.Evict(It.IsAny<string>()), Times.Never);
         }
 
         [Test]

@@ -25,6 +25,11 @@
     <PackageReference Include="NUnit3TestAdapter" Version="6.3.0" />
     <PackageReference Include="StackExchange.Redis" Version="3.3.1" />
     <PackageReference Include="Testcontainers" Version="4.15.0" />
+    <PackageReference Include="Testcontainers.MariaDb" Version="4.15.0" />
+    <PackageReference Include="Testcontainers.MsSql" Version="4.15.0" />
+    <PackageReference Include="Testcontainers.MySql" Version="4.15.0" />
+    <PackageReference Include="Testcontainers.Oracle" Version="4.15.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <PackageReference Include="Testcontainers.Redis" Version="4.15.0" />
   </ItemGroup>
 

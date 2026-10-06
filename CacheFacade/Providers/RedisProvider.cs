@@ -91,6 +91,11 @@ namespace Beztek.Facade.Cache.Providers
             return currentValue;
         }
 
+        public void Evict(string key)
+        {
+            this.cacheDatabase.KeyDelete(key);
+        }
+
         public bool Clear()
         {
             if (this.connectionKey == null || !Multiplexers.TryGetValue(this.connectionKey, out Lazy<ConnectionMultiplexer> lazy))

@@ -64,5 +64,23 @@ namespace Beztek.Facade.Cache.Tests
             this.database.Verify(d => d.StringGet(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()), Times.Never);
             this.database.Verify(d => d.KeyDelete(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()), Times.Never);
         }
+
+        [Test]
+        public void Dispose_IsIdempotent()
+        {
+            this.database
+                .Setup(d => d.StringSet("orders:lock:k1", It.IsAny<RedisValue>(), It.IsAny<TimeSpan?>(), When.NotExists))
+                .Returns(true);
+            this.database
+                .Setup(d => d.LockRelease("orders:lock:k1", It.IsAny<RedisValue>(), It.IsAny<CommandFlags>()))
+                .Returns(true);
+
+            IDisposable handle = this.factory.AcquireLock("k1", 50, 300, 1);
+            handle.Dispose();
+            Assert.DoesNotThrow(() => handle.Dispose());
+            this.database.Verify(
+                d => d.LockRelease("orders:lock:k1", It.IsAny<RedisValue>(), It.IsAny<CommandFlags>()),
+                Times.Once);
+        }
     }
 }

@@ -3,9 +3,11 @@
 namespace Beztek.Facade.Cache
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.IO;
     using System.Threading.Tasks;
+    using System.Transactions;
 
     using Beztek.Facade.Cache.Providers;
     using Beztek.Facade.Queue;
@@ -36,6 +38,8 @@ namespace Beztek.Facade.Cache
         private IAsyncDisposable asyncDisposableProvider;
         private IDisposable disposableProvider;
         private int disposed;
+        private readonly ConcurrentDictionary<string, AmbientWriteThroughTransactionCleanup> ambientWriteThroughCleanups =
+            new ConcurrentDictionary<string, AmbientWriteThroughTransactionCleanup>(StringComparer.Ordinal);
 
         /// <summary>Optional logger for facade diagnostics.</summary>
         protected ILogger Logger { get; set; }
@@ -308,6 +312,7 @@ namespace Beztek.Facade.Cache
                     ? BuildWriteBehindMessage(key, WriteType.Create, value)
                     : null;
                 this.CacheProvider.Put(key, value);
+                this.TrackWriteThroughKeyForAmbientTransaction(key);
 
                 switch (this.CacheType)
                 {
@@ -407,6 +412,7 @@ namespace Beztek.Facade.Cache
                 ? BuildWriteBehindMessage(key, WriteType.Update, value)
                 : null;
             this.CacheProvider.Put(key, value);
+            this.TrackWriteThroughKeyForAmbientTransaction(key);
 
             switch (this.CacheType)
             {
@@ -456,6 +462,7 @@ namespace Beztek.Facade.Cache
                 this.Logger?.LogDebug($"CacheProvider RemoveAsync. id: {key}");
 
                 this.CacheProvider.Remove<T>(key);
+                this.TrackWriteThroughKeyForAmbientTransaction(key);
 
                 switch (this.CacheType)
                 {
@@ -567,13 +574,22 @@ namespace Beztek.Facade.Cache
         /// <inheritdoc />
         public Task<bool> FlushKeyAsync<T>(string key)
         {
-            if (key != null)
+            if (key == null)
             {
-                this.CacheProvider.Remove<T>(key);
-                return Task.FromResult(true);
+                return Task.FromResult(false);
             }
 
-            return Task.FromResult(false);
+            try
+            {
+                this.CacheProvider.Evict(key);
+                return Task.FromResult(true);
+            }
+            catch (Exception e)
+            {
+                string message = $"Error occurred when flushing cache key. Key: {key}";
+                this.Logger?.LogError(e, message);
+                throw new IOException(message, e);
+            }
         }
 
         /// <inheritdoc />
@@ -618,6 +634,48 @@ namespace Beztek.Facade.Cache
         }
 
         // Internal
+
+        /// <summary>
+        /// When an ambient <see cref="TransactionScope"/> is present, track this WriteThrough key so a
+        /// rolled-back transaction evicts the provider entry (SQL rolls back via sql-facade enlistment).
+        /// No-op for write-behind and when there is no ambient transaction.
+        /// </summary>
+        private void TrackWriteThroughKeyForAmbientTransaction(string key)
+        {
+            if (this.CacheType != CacheType.WriteThrough || string.IsNullOrEmpty(key))
+            {
+                return;
+            }
+
+            Transaction transaction = Transaction.Current;
+            if (transaction == null)
+            {
+                return;
+            }
+
+            string localId = transaction.TransactionInformation.LocalIdentifier;
+            var candidate = new AmbientWriteThroughTransactionCleanup(this, localId);
+            AmbientWriteThroughTransactionCleanup cleanup =
+                this.ambientWriteThroughCleanups.GetOrAdd(localId, candidate);
+            if (ReferenceEquals(cleanup, candidate))
+            {
+                // TransactionCompleted (not EnlistVolatile): avoids promoting the ambient
+                // SQL transaction to two-phase commit with the database driver.
+                transaction.TransactionCompleted += cleanup.OnTransactionCompleted;
+            }
+
+            cleanup.Track(key);
+        }
+
+        internal void EvictProviderKey(string key)
+        {
+            this.CacheProvider.Evict(key);
+        }
+
+        internal void ClearAmbientWriteThroughCleanup(string transactionLocalId)
+        {
+            this.ambientWriteThroughCleanups.TryRemove(transactionLocalId, out _);
+        }
 
         private static int CalculateRetryIntervalMillis(long timeoutMillis)
         {

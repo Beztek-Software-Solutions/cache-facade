@@ -33,6 +33,13 @@ namespace Beztek.Facade.Cache.Providers
         T Remove<T>(string key);
 
         /// <summary>
+        /// Removes the key from the provider without deserializing a return value.
+        /// Used when aborting an ambient WriteThrough transaction.
+        /// </summary>
+        /// <param name="key">Cache item key.</param>
+        void Evict(string key);
+
+        /// <summary>
         /// Clears the entire cached contents.
         /// </summary>
         /// <returns><c>true</c> on success.</returns>

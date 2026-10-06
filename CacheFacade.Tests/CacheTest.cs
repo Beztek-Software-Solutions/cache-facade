@@ -140,18 +140,17 @@ namespace Beztek.Facade.Cache.Tests
         public async Task FlushSpecificeAsyncTest()
         {
             TestCacheable cacheable = new TestCacheable("test-key", "getandputasync-result");
-            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(cacheable);
-            this.CacheProvider.Setup(m => m.Remove<TestCacheable>(It.IsAny<string>())).Returns(cacheable);
+            this.CacheProvider.Setup(m => m.Evict(cacheable.Id));
             bool result = await this.Cache.FlushKeyAsync<TestCacheable>(cacheable.Id).ConfigureAwait(false);
             Assert.That(result, Is.True);
+            this.CacheProvider.Verify(m => m.Evict(cacheable.Id), Times.Once);
         }
 
         [Test]
         public void FlushAsyncExceptionTest()
         {
             TestCacheable cacheable = new TestCacheable("test-key", "getandputasync-result");
-            this.CacheProvider.Setup(m => m.Get<TestCacheable>(It.IsAny<string>())).Returns(cacheable);
-            this.CacheProvider.Setup(m => m.Remove<TestCacheable>(It.IsAny<string>())).Throws(new IOException("dummy-exception"));
+            this.CacheProvider.Setup(m => m.Evict(cacheable.Id)).Throws(new IOException("dummy-exception"));
             Assert.ThrowsAsync<IOException>(async () => await this.Cache.FlushKeyAsync<TestCacheable>(cacheable.Id).ConfigureAwait(false));
         }
     }
